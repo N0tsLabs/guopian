@@ -225,7 +225,13 @@ function renderList() {
           if (kid != null) S.sel.add(kid);
         }
       } else if (e.ctrlKey || e.metaKey) {
-        // 按住 Ctrl 点击：加一张或去掉一张
+        // 按住 Ctrl 点击：加一张或去掉一张。
+        // 第一次按 Ctrl 点的时候，把「当前正在看的那张」一起选上 ——
+        // 否则第一次只选中一张，进不了多图模式，要等第二次点击才生效。
+        if (!S.sel.size) {
+          const curId = S.queue[S.idx] && S.queue[S.idx].id;
+          if (curId != null && curId !== id) S.sel.add(curId);
+        }
         if (id != null) {
           if (S.sel.has(id)) S.sel.delete(id); else S.sel.add(id);
         }

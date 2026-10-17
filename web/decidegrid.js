@@ -96,8 +96,11 @@ const DecideGrid = (() => {
     const cs = getComputedStyle(body);
     const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
     const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-    const headH = ($('#dgBody', root).previousElementSibling || {}).offsetHeight || 0;
-    const footH = ($('#dgFoot', root) || {}).offsetHeight || 0;
+    const headEl = root.querySelector('.dgHead');
+    const headH = headEl ? headEl.offsetHeight : 0;
+    // 底栏只有 class 没有 id（我当初在模板里没写 id），用选择器取。
+    const footEl = root.querySelector('.dgFoot');
+    const footH = footEl ? footEl.offsetHeight : 0;
     return computeGridLayout(
       ids.length,
       Math.max(1, r.width - padX),
