@@ -213,29 +213,29 @@ function renderList() {
     it.onclick = (e) => {
       const i = +it.dataset.i;
       const id = S.queue[i] && S.queue[i].id;
-      const additive = e.ctrlKey || e.metaKey || e.shiftKey || S.multi;
-
+      // 和文件资源管理器一样：修饰键要按着才算数，松开就是普通点击。
+      // 我上一版做成了"Ctrl+点一次就进入粘性多选"，那是错的 ——
+      // 松开 Ctrl 之后普通点击又会清空，两种行为混在一起只会让人摸不着头脑。
       if (e.shiftKey && S.selAnchor != null) {
-        // Shift：从锚点到这一行整段加入
+        // Shift：从锚点到这一行，整段加入
         const a = Math.min(S.selAnchor, i);
         const b = Math.max(S.selAnchor, i);
         for (let k = a; k <= b; k++) {
           const kid = S.queue[k] && S.queue[k].id;
           if (kid != null) S.sel.add(kid);
         }
-      } else if (e.ctrlKey || e.metaKey || S.multi) {
-        // Ctrl+点进入多选模式，之后普通点击继续加选 —— 不用一直按着 Ctrl。
-        // 再点一次同一张就取消它。
+      } else if (e.ctrlKey || e.metaKey) {
+        // 按住 Ctrl 点击：加一张或去掉一张
         if (id != null) {
           if (S.sel.has(id)) S.sel.delete(id); else S.sel.add(id);
         }
-        S.multi = S.sel.size > 0;
         S.selAnchor = i;
       } else {
+        // 没按修饰键：清空选择，回到单选
         if (S.sel.size) S.sel.clear();
-        S.multi = false;
         S.selAnchor = i;
       }
+      S.multi = false;
 
       S.idx = i;
       // 不调 render()：整表重建会让缩略图重新请求、列表跳动，
