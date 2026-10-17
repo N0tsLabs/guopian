@@ -317,3 +317,89 @@ MediaPipe 的 478 点里已经带了虹膜（468 / 473 是虹膜中心，469–4
 它不追求覆盖一切 —— 一个天天误报的检查一周内就会被关掉，**比没有更糟**。
 能查的查死，查不了的**在脚本注释里写明为什么不查**。
 
+---
+
+## 技术选择
+
+| | 用了什么 | 为什么 |
+|---|---|---|
+| **前端** | 原生 JS + CSS，**零依赖、无构建步骤** | 一个本地工具不需要 Webpack。打开 DevTools 看到的就是源码 || **后端** | Python 3.10 + Flask，只监听 `127.0.0.1` | 生态里图像处理和人脸模型最成熟的地方 |
+| **人脸** | MediaPipe Face Landmarker（Tasks API） | 一次推理拿到 478 关键点 + 52 blendshape + 头部姿态，全本机 |
+| **图像** | Pillow + numpy | 够了，而且不会引入一个几百 MB 的依赖 |
+| **存储** | SQLite（WAL） | 单文件、零配置、可只读打开 |
+| **打包** | PyInstaller onedir | 双 EXE 共用 COLLECT，避免重复打依赖 |
+
+界面是深色的，这不是风格选择 —— **看照片时周围越暗越好**。
+主色是中性近黑 `#0B0C0E`，不是生成器爱给的蓝调深色：有色的环境光会改变你对照片的判断。
+
+### 前端是浏览器原生 ES module（十一个文件，零依赖、零构建）
+
+```
+web/index.html          唯一的 <script type="module" src="/home.js">
+web/core.js      72 行  G（$ $$ api toast esc sleep fmtCount）+ 视图切换   无依赖
+web/state.js     70 行  el / S / V / LABEL / VERDICT / OWNED / cur        无依赖
+web/view.js     186 行  适应窗口、缩放、平移、滚轮与双击手势
+web/physics.js  376 行  拖拽刚体积分器 + 鼠标手势 + 蒙版/印章反馈
+web/histogram.js106 行  人脸框、直方图、过曝斑马纹
+web/list.js     192 行  左侧照片列表 + "上次看到哪一张"的记忆
+web/card.js     313 行  卡片本身：预览、原图、建议、问题标签、元信息
+web/grid.js      91 行  网格视图（框选批量决定）
+web/keys.js     159 行  键盘。全应用唯一一处键位表
+web/app.js      609 行  接线层：生命周期、决策流程、对话框、以及所有模块的装配
+web/home.js     485 行  首页：项目列表、详情、文件夹浏览器 —— 也是唯一入口
+```
+
+依赖只有一个方向，没有环：
+
+```
+core.js  state.js                      ← 叶子，谁都不 import
+   ↑         ↑
+ view.js ────┤
+   ↑         │
+physics.js   ├── histogram.js
+   ↑         │
+ list.js ────┘
+   ↑
+ card.js
+   ↑
+ grid.js
+   ↑
+ keys.js
+   ↑
+ app.js     ← 所有 configure() 装配都集中在这里
+   ↑
+ home.js    ← 入口
+```
+
+几条向上的线（列表点击要换卡片、物理甩完要落决定、键盘敲了要分发到动作、
+库被关掉要回首页）不能 import 回去 —— 那就成环了。它们全部由 `app.js`
+在末尾用 `configure({...})` 注入，注入的名字和接收方模块里的占位符同名，
+所以被注入的函数体一个字都不用改。
+
+`home.js` 静态 import `app.js`，这一条 import 就是**启动竞态的修法**：
+原来是三个普通 `<script>`，`home.js` 末尾直接 `Home.boot()`，它
+`await fetch('/api/home')` 之后调 `App.setLabels()` —— 那时 `app.js` 往往
+刚解析到一半，能跑只是因为**网络往返比解析 73 KB 慢**。现在求值顺序由
+import 图保证，`app.js` 不可能没跑完。
+
+`hygiene.py` 的第 4 组会静态检查：每个 `import` 的路径存在、名字真的有对应
+`export`、依赖图无环、每个 `.js` 都是模块（没人往 `window` 上挂东西）、
+以及"跨模块用到的名字都 import 了"。
+
+### 组件只有一个基类
+
+所有按钮都是 `.btn` 加修饰符，几何形状写在基类里，修饰符只改颜色和尺寸：
+
+```html
+<button class="btn">默认</button>
+<button class="btn ghost">次要</button>
+<button class="btn primary">主要动作</button>
+<button class="btn danger">破坏性动作</button>
+<button class="btn primary block lg">整行的大按钮</button>
+```
+
+> 这里踩过一次：给主页加按钮时**又写了一个 `.btn`**（`34px` / `.pri` / `.danger`），
+> 而项目里本来就有 `.btn`（`30px` / `.primary` / `.ghost`）。同一个概念两个名字，
+> CSS 又不报错，后定义的静默生效。`hygiene.py` 现在会数 `.btn{` 出现的次数。
+
+---
