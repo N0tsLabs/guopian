@@ -523,16 +523,23 @@ async function applyDialog() {
     </div>
     ${pv.truncated ? `<p class="muted small">…还有 ${pv.truncated} 张未显示</p>` : ''}
     ${ro ? `<p class="muted small" style="color:#e3b341">本库以只读方式打开，不会移动文件。</p>` : ''}
+    <p class="muted small">
+      「只做星标，不搬文件」不移动任何照片，只把判断写成星标
+      （不过 = 1 星，其余 = 0 星）。接着用 Lightroom 或 Bridge 的人，
+      缩略图上会直接看到这个星标。
+    </p>
     <div class="rowBtns">
       <button class="btn ghost" id="apCancel">取消</button>
-      <button class="btn ghost" id="apXmp">只写 XMP 标记（不动文件）</button>
+      <button class="btn ghost" id="apXmp" title="把「不过」写成 1 星、其余写成 0 星，存进照片的星标信息里。文件留在原处，Lightroom / Bridge 能直接读到。">只做星标，不搬文件</button>
       <button class="btn primary" id="apGo" ${ro ? 'disabled' : ''}>确认移动 ${pv.count} 张</button>
     </div>`;
   const resetBtn = $('#apReset');
   if (resetBtn) {
     resetBtn.onclick = async () => {
-      const n = (st.counts.decisions.keep || 0) + (st.counts.decisions.mark || 0)
-              + (st.counts.decisions.reject || 0);
+      // 这个函数里没有 st 这个变量，只有 S.state —— 之前写成 st 会当场
+      // ReferenceError，表现就是"按钮点了没反应"。
+      const d = (S.state && S.state.counts && S.state.counts.decisions) || {};
+      const n = (d.keep || 0) + (d.mark || 0) + (d.reject || 0);
       // 二次确认：动全库的动作，点两次。
       if (!window.confirm(`要把这个项目的 ${n} 张决策全部清掉吗？\n\n照片不会被移动或删除，只是回到"还没看过"的状态。\n这个操作不可撤销。`)) return;
       const r = await api('/api/reset', { method: 'POST', body: JSON.stringify({ confirm: true }) });
