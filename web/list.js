@@ -341,7 +341,18 @@ async function syncGrid() {
     if (S.sel.size >= 2) {
       // 每次都重新打开，不是只在没开的时候开：多选一张就要多一个格子，
       // 否则网格会一直停在第一次打开时的数量上。
-      DecideGrid.open(Array.from(S.sel), () => { S.sel.clear(); render(); });
+      DecideGrid.open(Array.from(S.sel), (what) => {
+        // 提交以后跳过刚决定完的整组，落到它后面那一张。
+        // 一组处理完就该往下走，而不是停在刚刚挑过的那张上。
+        const decided = new Set(S.sel);
+        let lastPos = -1;
+        S.queue.forEach((c, k) => { if (decided.has(c.id)) lastPos = k; });
+        S.sel.clear();
+        if (what === 'commit' && lastPos >= 0) {
+          S.idx = Math.min(S.queue.length - 1, lastPos + 1);
+        }
+        render();
+      });
     } else if (DecideGrid.isOpen()) {
       DecideGrid.close();
     }
