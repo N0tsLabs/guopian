@@ -1720,7 +1720,7 @@ code{font:400 11.5px var(--mono);color:var(--ink-2);
 /* ── 一起决定：多选以后右侧变成网格 ──
    左边列表不动，网格盖住右侧区域，所以还能回去改选择。 */
 .decideGrid{
-  position:fixed;top:0;right:0;bottom:0;left:340px;z-index:60;
+  position:fixed;top:var(--topbar-h,37px);right:0;bottom:0;left:340px;z-index:60;
   background:var(--canvas);display:flex;flex-direction:column;
 }
 .decideGrid.hidden{display:none}
@@ -1763,3 +1763,14 @@ code{font:400 11.5px var(--mono);color:var(--ink-2);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .btn.danger{background:var(--reject);border-color:var(--reject);color:var(--on-solid)}
+
+/* 被多选的行。和 .current（当前正在看的那张）是两件事：
+   .current 是会跟着走的游标，.sel 是"待会儿一起决定"的集合。 */
+.listItem.sel{
+  background:color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow:inset 0 0 0 1px var(--accent);
+}
+.listItem.sel .nm{color:var(--ink)}
+.listItem.sel::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);
+}

@@ -212,28 +212,35 @@ function renderList() {
   $$('.listItem', el.listScroll).forEach(it => {
     it.onclick = (e) => {
       const i = +it.dataset.i;
-      S.idx = i;
-      // Ctrl/Shift 多选：选中两张以上，右侧就换成决策网格。
-      // 不是"多选后批量套一个动作"，而是"挑出活下来的" —— 见 decidegrid.js。
-      if (e.ctrlKey || e.metaKey) {
-        const id = S.queue[i] && S.queue[i].id;
+      const id = S.queue[i] && S.queue[i].id;
+      const additive = e.ctrlKey || e.metaKey || e.shiftKey || S.multi;
+
+      if (e.shiftKey && S.selAnchor != null) {
+        // Shift：从锚点到这一行整段加入
+        const a = Math.min(S.selAnchor, i);
+        const b = Math.max(S.selAnchor, i);
+        for (let k = a; k <= b; k++) {
+          const kid = S.queue[k] && S.queue[k].id;
+          if (kid != null) S.sel.add(kid);
+        }
+      } else if (e.ctrlKey || e.metaKey || S.multi) {
+        // Ctrl+点进入多选模式，之后普通点击继续加选 —— 不用一直按着 Ctrl。
+        // 再点一次同一张就取消它。
         if (id != null) {
           if (S.sel.has(id)) S.sel.delete(id); else S.sel.add(id);
-          S.selAnchor = i;
         }
-      } else if (e.shiftKey) {
-        const a = Math.min(S.selAnchor == null ? i : S.selAnchor, i);
-        const b = Math.max(S.selAnchor == null ? i : S.selAnchor, i);
-        for (let k = a; k <= b; k++) {
-          const id = S.queue[k] && S.queue[k].id;
-          if (id != null) S.sel.add(id);
-        }
+        S.multi = S.sel.size > 0;
         S.selAnchor = i;
       } else {
         if (S.sel.size) S.sel.clear();
+        S.multi = false;
         S.selAnchor = i;
       }
-      render();
+
+      S.idx = i;
+      // 不调 render()：整表重建会让缩略图重新请求、列表跳动，
+      // 多选时每点一下闪一次。选择只是几行加个类，改类就够。
+      paintSelection();
       syncGrid();
     };
   });
@@ -359,6 +366,19 @@ async function syncGrid() {
   } catch (e) {
     console.error('决策网格打开失败', e);
   }
+}
+
+
+/** 只更新「哪些行被选中」的样式，不重建列表。 */
+function paintSelection() {
+  $$('.listItem', el.listScroll).forEach((it) => {
+    const i = +it.dataset.i;
+    const id = S.queue[i] && S.queue[i].id;
+    const on = id != null && S.sel.has(id);
+    it.classList.toggle('sel', on);
+    it.classList.toggle('current', i === S.idx);
+  });
+  if (typeof highlightCurrent === 'function') highlightCurrent();
 }
 
 export { posKey, savedPos, savePos, sessKey, savedSession, saveSession,

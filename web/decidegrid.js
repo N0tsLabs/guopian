@@ -138,6 +138,8 @@ const DecideGrid = (() => {
     const listEl = $('#listScroll');
     const left = listEl ? listEl.getBoundingClientRect().right : 0;
     root.style.left = Math.max(0, left) + 'px';
+    const bar = document.querySelector('.topbar');
+    root.style.top = (bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0) + 'px';
 
     const g = chooseLayout();
     const body = $('#dgBody', root);
@@ -154,7 +156,7 @@ const DecideGrid = (() => {
       el.className = 'dgTile';
       el.dataset.id = id;
       el.innerHTML = `
-        <img src="/api/thumb/${id}" alt="" draggable="false">
+        <img src="/img/${id}/small" alt="" draggable="false">
         <span class="dgBadge"></span>
         <span class="dgName">${esc(c.name || '')}</span>`;
       body.appendChild(el);
