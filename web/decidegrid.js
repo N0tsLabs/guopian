@@ -89,9 +89,19 @@ const DecideGrid = (() => {
   }
 
   function chooseLayout() {
+    // 量根的可用区域，不量 .dgBody 自己 —— 刚设过 grid-template-columns 以后，
+    // 它的宽度会被列数反向约束，越量越小，最后掉到 96px 下限。
     const body = $('#dgBody', root);
-    const r = body.getBoundingClientRect();
-    return computeGridLayout(ids.length, r.width, r.height);
+    const r = root.getBoundingClientRect();
+    const cs = getComputedStyle(body);
+    const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+    const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    const headH = ($('#dgBody', root).previousElementSibling || {}).offsetHeight || 0;
+    const footH = ($('#dgFoot', root) || {}).offsetHeight || 0;
+    return computeGridLayout(
+      ids.length,
+      Math.max(1, r.width - padX),
+      Math.max(1, r.height - padY - headH - footH));
   }
 
   function paint() {
@@ -135,17 +145,28 @@ const DecideGrid = (() => {
     // 上次打开留下的临时标记要清掉，否则会串到这个批次里
     ids.forEach((id) => { const c = cards.get(id); if (c) delete c.__gridPick; });
 
+    // 先显示再量。元素还在 display:none 的时候 getBoundingClientRect() 是
+    // 0×0，布局就算成最小格子 —— 在真窗口里表现为一堆 96px 缩略图挤在中间。
+    root.classList.remove('hidden');
+
     const listEl = $('#listScroll');
     const left = listEl ? listEl.getBoundingClientRect().right : 0;
     root.style.left = Math.max(0, left) + 'px';
+
+    // 起点放在筛选条下面，不是只避开顶栏 —— 否则网格头会压在「全部/未审/过…」上。
+    const chips = document.querySelector('.chips');
     const bar = document.querySelector('.topbar');
-    root.style.top = (bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0) + 'px';
+    const anchor = chips && chips.getBoundingClientRect().height
+      ? chips : bar;
+    const top = anchor ? anchor.getBoundingClientRect().bottom : 0;
+    root.style.top = Math.max(0, top) + 'px';
 
     const g = chooseLayout();
     const body = $('#dgBody', root);
     body.style.gridTemplateColumns = `repeat(${g.cols}, ${g.tile}px)`;
     body.style.gridAutoRows = `${g.tile}px`;
-    body.style.width = g.overflow ? (g.cols * (g.tile + GAP)) + 'px' : '';
+    body.style.width = '100%';
+    if (g.overflow) body.style.width = (g.cols * (g.tile + GAP)) + 'px';
 
     tiles = new Map();
     body.innerHTML = '';
