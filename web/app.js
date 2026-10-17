@@ -481,7 +481,9 @@ async function applyDialog() {
   let pv;
   try { pv = await api('/api/apply/preview?mode=quarantine'); }
   catch (e) { toast('读取失败', 'err'); return; }
-  if (!pv.count) { toast('审过的照片都已经归档了，没有要移动的'); return; }
+  // 不在这里 return。没有要移动的照片时，这一屏仍然是「撤销上次归档」和
+  // 「重置全部决策」唯一能进来的地方 —— 审完了就把门关上，等于这两个功能
+  // 永远用不到。改成在对话框里写清楚「没有要移动的」。
   const ro = S.state && S.state.read_only;
   // Undo lives on the screen where applying happens. A separate history page is
   // a place nobody visits until after they already wanted it.
@@ -503,7 +505,8 @@ async function applyDialog() {
     <p class="muted small">筛选过程没有动过任何文件。下面是即将执行的唯一一次文件操作。</p>
     ${undoBar}
     ${resetBar}
-    <h3>将把 <b style="color:#ff8b84">${pv.count}</b> 张照片归入三个文件夹</h3>
+    ${pv.count ? `<h3>将把 <b style="color:#ff8b84">${pv.count}</b> 张照片归入三个文件夹</h3>`
+               : '<h3 class="muted">没有要移动的照片 —— 审过的都已经归档了</h3>'}
     ${pv.groups.map(g => `
       <div class="applyRow">
         <span class="applyTag d-${g.decision}">${esc(g.label)}</span>
@@ -531,12 +534,11 @@ async function applyDialog() {
       const n = (st.counts.decisions.keep || 0) + (st.counts.decisions.mark || 0)
               + (st.counts.decisions.reject || 0);
       // 二次确认：动全库的动作，点两次。
-      if (!window.confirm(`要把这个项目的 ${n} 张决策全部清掉吗？\n\n照片不会被移动或删除，只是回到"还没看过"的状态。\n清掉以后还可以用 ⌫ 整批撤回。`)) return;
+      if (!window.confirm(`要把这个项目的 ${n} 张决策全部清掉吗？\n\n照片不会被移动或删除，只是回到"还没看过"的状态。\n这个操作不可撤销。`)) return;
       const r = await api('/api/reset', { method: 'POST', body: JSON.stringify({ confirm: true }) });
       if (!r || !r.ok) { toast('重置失败：' + ((r && r.error) || ''), 'err'); return; }
-      window.__lastBatch = r.batch;
       closeModal();
-      toast(`已清掉 ${r.result.cleared} 张决策 · ⌫ 可撤回`);
+      toast(`已清掉 ${r.result.cleared} 张决策，全部回到未看状态`);
       await loadState();
       loadQueue();
     };

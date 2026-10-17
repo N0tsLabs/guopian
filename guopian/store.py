@@ -470,20 +470,23 @@ class Store:
         con.commit()
         return prev
 
-    def reset_all(self, batch: str | None = None) -> dict:
-        """Clear every decision in the library, as one undoable batch.
+    def reset_all(self) -> dict:
+        """清空整个项目的决策。
 
-        Same mechanism as deciding a group in the grid: each photo goes through
-        set_decision(CLEAR), which logs the previous value, so the whole reset
-        can be taken back with undo_batch(batch). A reset that could not be
-        undone would be the only destructive button in the app.
+        这不是撤销，是重来 —— 所以不写日志。set_decision 那一套会为每一张
+        记一条，93 张就是 93 条，只为了让一个明确说了"全部清掉"的操作还能
+        反悔；那不是用户要的语义，也会让日志表迅速变得没法读。
+
+        照片文件一个都不动，只有数据库里的 decision 归零。
         """
-        rows = self.conn.execute(
-            "SELECT id FROM photos WHERE decision IS NOT NULL AND decision <> ''"
-        ).fetchall()
-        for r in rows:
-            self.set_decision(r["id"], config.CLEAR, batch)
-        return {"cleared": len(rows), "batch": batch}
+        con = self.conn
+        n = con.execute(
+            "SELECT COUNT(*) AS n FROM photos WHERE decision IS NOT NULL AND decision <> ''"
+        ).fetchone()["n"]
+        con.execute("UPDATE photos SET decision=NULL, decided_at=NULL "
+                    "WHERE decision IS NOT NULL AND decision <> ''")
+        con.commit()
+        return {"cleared": n}
 
     def undo_batch(self, batch: str) -> dict:
         """Revert every decision a single batch made.

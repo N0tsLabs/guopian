@@ -567,10 +567,7 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
         if not body.get("confirm"):
             return jsonify({"ok": False,
                             "error": "需要确认：这会清掉这个项目的全部决策"}), 409
-        import uuid as _uuid
-        batch = "reset-" + _uuid.uuid4().hex[:8]
-        res = lib.store.reset_all(batch)
-        return jsonify({"ok": True, "batch": batch, "result": res})
+        return jsonify({"ok": True, "result": lib.store.reset_all()})
 
     @app.post("/api/undo")
     def undo():
