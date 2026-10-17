@@ -470,6 +470,29 @@ class Store:
         con.commit()
         return prev
 
+    def undo_batch(self, batch: str) -> dict:
+        """Revert every decision a single batch made.
+
+        The grid decides a whole group at once -- the survivors kept, the rest
+        marked rejected -- so undo has to take the whole batch back, not just
+        the last row. Undoing one of ten decisions would leave the library in a
+        state the user never chose.
+        """
+        con = self.conn
+        rows = con.execute(
+            """SELECT * FROM decisions_log WHERE batch=? AND undone=0
+               ORDER BY id DESC""", (batch,)).fetchall()
+        if not rows:
+            return {"restored": 0, "photos": []}
+        ids = []
+        for row in rows:
+            con.execute("UPDATE photos SET decision=?, decided_at=? WHERE id=?",
+                        (row["prev_action"], time.time(), row["photo_id"]))
+            con.execute("UPDATE decisions_log SET undone=1 WHERE id=?", (row["id"],))
+            ids.append(row["photo_id"])
+        con.commit()
+        return {"restored": len(rows), "photos": ids}
+
     def undo_last(self) -> dict | None:
         con = self.conn
         row = con.execute(

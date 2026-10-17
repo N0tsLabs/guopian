@@ -558,6 +558,14 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
         lib, err = need_lib()
         if err:
             return err
+        body = request.get_json(silent=True) or {}
+        batch = body.get("batch")
+        if batch:
+            # A grid commit decides a whole group at once, so it is undone as
+            # one. Reverting only the last row would leave a state the user
+            # never chose.
+            return jsonify({"ok": True, "batch": batch,
+                            "result": lib.store.undo_batch(batch)})
         res = lib.store.undo_last()
         return jsonify({"ok": res is not None, "result": res})
 
