@@ -203,9 +203,19 @@ const DecideGrid = (() => {
    }
   }
 
+  /** 用户按 Esc / 点取消：退出并把选择清空。 */
   function close() {
     if (root) root.classList.add('hidden');
     if (onDone) { const f = onDone; onDone = null; f('cancel'); }
+  }
+
+  /** 程序自己收起（比如选中数掉到 1）。
+   *  不跑回调 —— 回调会清空选择，那样用户刚点出来的东西会被自己抹掉。 */
+  function closeQuiet() {
+    if (root) root.classList.add('hidden');
+    // 不要清 onDone：清掉以后用户再按 Esc，close() 就找不到回调，
+    // 选择永远清不掉 —— 表现为「退出了多图模式，左边还挂着一排选中」。
+    // 回调本身只关心 what 是什么，重复调用是安全的。
   }
 
   async function commit() {
@@ -285,6 +295,9 @@ function isZoomed() {
     // ── 放大状态：一套单独的键位 ──
     // 看清楚了就当场决定，不用退出去；左右翻还是同一组照片。
     if (isZoomed()) {
+      // 空格在放大里是「关掉」。之前这一块对任何键都 return true，
+      // 空格被吞掉了，只能按 Esc 才出得来。
+      if (k === ' ') { e.preventDefault(); closeZoom(); return true; }
       if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown') {
         e.preventDefault();
         const d = (k === 'ArrowLeft' || k === 'ArrowUp') ? -1 : 1;
@@ -339,7 +352,7 @@ function isZoomed() {
     if (onKey(e)) { e.stopPropagation(); }
   }, true);
 
-  return { open, close, commit, onKey,
+  return { open, close, closeQuiet, commit, onKey,
            isOpen: () => !!root && !root.classList.contains('hidden') };
 })();
 

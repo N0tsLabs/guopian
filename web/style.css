@@ -1779,8 +1779,23 @@ code{font:400 11.5px var(--mono);color:var(--ink-2);
   position:fixed;inset:0;z-index:80;background:rgba(4,5,7,.95);
   display:flex;align-items:center;justify-content:center;
   cursor:zoom-out;
+  /* 打开和关闭都过渡一下。用 opacity + 轻微放大，从缩略图位置"长"出来的
+     感觉；直接切换太生硬。 */
+  opacity:1;
+  transition:opacity .18s ease;
 }
-.dgZoom.hidden{display:none}
+.dgZoom.hidden{
+  display:flex;            /* 不用 display:none，否则没有过渡 */
+  opacity:0;
+  pointer-events:none;
+  visibility:hidden;
+  transition:opacity .15s ease, visibility 0s linear .15s;
+}
+.dgZoom img{
+  transform:scale(1);
+  transition:transform .2s cubic-bezier(.2,.7,.3,1);
+}
+.dgZoom.hidden img{transform:scale(.94)}
 .dgZoom img{
   max-width:94vw;max-height:92vh;object-fit:contain;
   box-shadow:0 24px 80px rgba(0,0,0,.7);border-radius:4px;

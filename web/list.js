@@ -361,6 +361,14 @@ async function syncGrid() {
         // 这个回调在 syncGrid 自己关掉网格时也会跑（比如选中数掉到 1），
         // 那时候如果也清空，就会把用户刚点出来的选择一起抹掉 ——
         // 表现为"第一次 Ctrl+点没反应"。
+        if (what === 'cancel') {
+          // 用户按 Esc 退出多图模式：选择也要清掉，
+          // 否则左侧还挂着一排选中，右侧已经是单图了。
+          S.sel.clear();
+          S.multi = false;
+          render();
+          return;
+        }
         if (what !== 'commit') { render(); return; }
         const decided = new Set(S.sel);
         S.sel.clear();
@@ -384,7 +392,7 @@ async function syncGrid() {
         render();
       });
     } else if (DecideGrid.isOpen()) {
-      DecideGrid.close();
+      DecideGrid.closeQuiet();
     }
   } catch (e) {
     console.error('决策网格打开失败', e);
