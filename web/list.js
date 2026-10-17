@@ -210,7 +210,32 @@ function renderList() {
   updateListProgress();
   renderListSummary();
   $$('.listItem', el.listScroll).forEach(it => {
-    it.onclick = () => { S.idx = +it.dataset.i; render(); };
+    it.onclick = (e) => {
+      const i = +it.dataset.i;
+      S.idx = i;
+      // Ctrl/Shift 多选：选中两张以上，右侧就换成决策网格。
+      // 不是"多选后批量套一个动作"，而是"挑出活下来的" —— 见 decidegrid.js。
+      if (e.ctrlKey || e.metaKey) {
+        const id = S.queue[i] && S.queue[i].id;
+        if (id != null) {
+          if (S.sel.has(id)) S.sel.delete(id); else S.sel.add(id);
+          S.selAnchor = i;
+        }
+      } else if (e.shiftKey) {
+        const a = Math.min(S.selAnchor == null ? i : S.selAnchor, i);
+        const b = Math.max(S.selAnchor == null ? i : S.selAnchor, i);
+        for (let k = a; k <= b; k++) {
+          const id = S.queue[k] && S.queue[k].id;
+          if (id != null) S.sel.add(id);
+        }
+        S.selAnchor = i;
+      } else {
+        if (S.sel.size) S.sel.clear();
+        S.selAnchor = i;
+      }
+      render();
+      syncGrid();
+    };
   });
 }
 
@@ -303,6 +328,27 @@ function configure(hooks) {
   if (hooks.renderTriage) renderTriage = hooks.renderTriage;
 }
 
+
+
+/** 选了两张以上就把右侧换成网格；一张都没有就关掉。
+ *
+ * 用动态 import：list.js 是基础模块，decidegrid.js 依赖它看的 S.queue，
+ * 静态引入会成环。而且网格挂着也不该让列表挂掉。
+ */
+async function syncGrid() {
+  try {
+    const { DecideGrid } = await import('./decidegrid.js');
+    if (S.sel.size >= 2) {
+      // 每次都重新打开，不是只在没开的时候开：多选一张就要多一个格子，
+      // 否则网格会一直停在第一次打开时的数量上。
+      DecideGrid.open(Array.from(S.sel), () => { S.sel.clear(); render(); });
+    } else if (DecideGrid.isOpen()) {
+      DecideGrid.close();
+    }
+  } catch (e) {
+    console.error('决策网格打开失败', e);
+  }
+}
 
 export { posKey, savedPos, savePos, sessKey, savedSession, saveSession,
          pickStartIndex, itemHTML, observeThumbs,

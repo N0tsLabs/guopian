@@ -1716,3 +1716,50 @@ code{font:400 11.5px var(--mono);color:var(--ink-2);
   font:400 10.5px var(--mono);color:var(--ink-3)}
 .tourActs{display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--line)}
 .tourActsSpacer{flex:1}
+
+/* ── 一起决定：多选以后右侧变成网格 ──
+   左边列表不动，网格盖住右侧区域，所以还能回去改选择。 */
+.decideGrid{
+  position:fixed;top:0;right:0;bottom:0;left:340px;z-index:60;
+  background:var(--canvas);display:flex;flex-direction:column;
+}
+.decideGrid.hidden{display:none}
+.dgHead,.dgFoot{display:flex;align-items:center;gap:12px;padding:10px 16px;flex:0 0 auto}
+.dgHead{border-bottom:1px solid var(--line)}
+.dgFoot{border-top:1px solid var(--line)}
+.dgHead .sp,.dgFoot .sp{flex:1}
+.dgTitle{font-size:12.5px;color:var(--ink-2)}
+.dgTitle b{font:600 12.5px var(--mono);color:var(--ink)}
+.dgHint{font-size:11px;color:var(--ink-3)}
+#dgSummary{font-size:11.5px;color:var(--ink-2)}
+.dgBody{
+  flex:1;min-height:0;overflow:auto;padding:16px;
+  display:grid;gap:10px;justify-content:center;align-content:center;
+}
+.dgTile{
+  position:relative;border-radius:8px;overflow:hidden;cursor:pointer;
+  border:2px solid var(--line);background:var(--surface-2);
+  display:flex;align-items:center;justify-content:center;
+}
+.dgTile img{width:100%;height:100%;object-fit:contain;display:block;background:var(--canvas)}
+/* 没点的会变成"不过"，提交前就该看得见 */
+.dgTile.will-reject{opacity:.55}
+.dgTile.will-reject::after{
+  content:'';position:absolute;inset:0;border:2px dashed var(--reject);
+  border-radius:6px;pointer-events:none;opacity:.5;
+}
+.dgTile.picked{border-color:var(--keep);opacity:1}
+.dgTile.picked.will-reject{opacity:1}
+.dgTile.marked{border-color:var(--mark)}
+.dgTile.focused{box-shadow:0 0 0 3px var(--accent)}
+.dgBadge{
+  position:absolute;top:6px;right:8px;font-size:15px;line-height:1;
+  color:var(--keep-ink);text-shadow:0 1px 3px rgba(0,0,0,.7);
+}
+.dgTile.marked .dgBadge{color:var(--mark-ink)}
+.dgName{
+  position:absolute;left:0;right:0;bottom:0;padding:3px 7px;
+  font:400 10px var(--mono);color:var(--on-solid);background:rgba(0,0,0,.55);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.btn.danger{background:var(--reject);border-color:var(--reject);color:var(--on-solid)}
