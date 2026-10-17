@@ -54,7 +54,7 @@ def available() -> tuple[bool, str | None]:
     if not _load_mp():
         return False, _MP_ERROR
     if not os.path.exists(config.FACE_MODEL):
-        return False, "model missing: run  python scripts/fetch_models.py"
+        return False, "人脸模型还没下载（3.6 MB）"
     return True, None
 
 

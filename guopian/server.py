@@ -274,6 +274,27 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
             "labels": _labels(),
         })
 
+    # ---------------------------------------------------------- models
+    @app.get("/api/models")
+    def models_status():
+        from . import models as models_mod
+        return jsonify(models_mod.status())
+
+    @app.post("/api/models/fetch")
+    def models_fetch():
+        """Download a detector model on demand.
+
+        Called automatically when a library opens and faces are unavailable,
+        so "faces need a 3.6 MB download" turns into something that waits a few
+        seconds rather than something the user has to act on.
+        """
+        from . import models as models_mod
+        body = request.get_json(silent=True) or {}
+        name = body.get("name", "face_landmarker.task")
+        # faces.available() stats the file every time, so a finished download
+        # takes effect on the next call with no cache to clear.
+        return jsonify(models_mod.ensure(name))
+
     # ---------------------------------------------------------- settings
     @app.get("/api/settings")
     def settings_get():

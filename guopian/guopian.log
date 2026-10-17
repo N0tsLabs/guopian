@@ -202,3 +202,5 @@ Traceback (most recent call last):
     analyzed = con.execute(
 sqlite3.OperationalError: no such column: analysis_version
 
+[2026-10-17T17:13:15] start with no folder (home screen), frozen=False
+[2026-10-17T17:13:26] start with no folder (home screen), frozen=False

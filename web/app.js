@@ -112,7 +112,39 @@ function grab() {
 
 /* ═════════════════════════ 生命周期 ═════════════════════════ */
 
+/* One automatic attempt to get the face model.
+ *
+ * The model is not in the repository, so a fresh clone has no face detection
+ * until it is downloaded. Asking the user to read a README and run a script is
+ * a step that only exists because of a packaging choice; the app can just fetch
+ * it. Guarded so it runs at most once per session and never blocks the list.
+ */
+let _modelTried = false;
+
+async function ensureFaceModel() {
+  if (_modelTried) return;
+  _modelTried = true;
+  try {
+    const st = await api('/api/models');
+    // The key is the filename, not the bare model name.
+    const m = (st.models || {})['face_landmarker.task'] || {};
+    if (m.present) return;
+    toast('正在下载人脸模型（3.6 MB），第一次需要一点时间…');
+    const r = await api('/api/models/fetch', { method: 'POST', body: '{}' });
+    if (r && r.ok) {
+      toast('人脸模型已就绪，重新分析后生效');
+      loadState();
+    } else {
+      toast('人脸模型下载失败：' + ((r && r.error) || '未知原因'), 'err');
+      _modelTried = false;
+    }
+  } catch (e) {
+    _modelTried = false;
+  }
+}
+
 function start() {
+  ensureFaceModel();
   if (!S.running) { grab(); bind(); S.running = true; }
   S.filter = 'all'; S.idx = 0;
   loadState().then(loadQueue);
@@ -669,5 +701,5 @@ function configure(hooks) {
 
 
 export { start, stop, attach, loadQueue, closeModal, setList, setLabels,
-  configure, applyDefaults
+  configure, applyDefaults, ensureFaceModel
 };
