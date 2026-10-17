@@ -1742,14 +1742,12 @@ code{font:400 11.5px var(--mono);color:var(--ink-2);
   display:flex;align-items:center;justify-content:center;
 }
 .dgTile img{width:100%;height:100%;object-fit:contain;display:block;background:var(--canvas)}
-/* 没点的会变成"不过"，提交前就该看得见 */
-.dgTile.will-reject{opacity:.55}
-.dgTile.will-reject::after{
-  content:'';position:absolute;inset:0;border:2px dashed var(--reject);
-  border-radius:6px;pointer-events:none;opacity:.5;
-}
-.dgTile.picked{border-color:var(--keep);opacity:1}
-.dgTile.picked.will-reject{opacity:1}
+/* 没点的会变成"不过"。只压暗，不画红虚线 ——
+   一片红框会把"没选"变成一堆警报，看着比实际严重。
+   底部那行字已经说清后果了，缩略图不用再喊一遍。 */
+.dgTile.will-reject{opacity:.42;border-color:var(--line)}
+.dgTile.will-reject:hover{opacity:.7}
+.dgTile.picked{opacity:1;border-color:var(--keep)}
 .dgTile.marked{border-color:var(--mark)}
 .dgTile.focused{box-shadow:0 0 0 3px var(--accent)}
 .dgBadge{
@@ -1773,4 +1771,21 @@ code{font:400 11.5px var(--mono);color:var(--ink-2);
 .listItem.sel .nm{color:var(--ink)}
 .listItem.sel::before{
   content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);
+}
+
+/* 放大查看：空格打开，Esc 关闭。就是个图片查看器，
+   只是它在网格之上，关掉之后还回到原来的位置。 */
+.dgZoom{
+  position:fixed;inset:0;z-index:80;background:rgba(4,5,7,.95);
+  display:flex;align-items:center;justify-content:center;
+  cursor:zoom-out;
+}
+.dgZoom.hidden{display:none}
+.dgZoom img{
+  max-width:94vw;max-height:92vh;object-fit:contain;
+  box-shadow:0 24px 80px rgba(0,0,0,.7);border-radius:4px;
+}
+.dgZoomHint{
+  position:fixed;left:0;right:0;bottom:18px;text-align:center;
+  font:400 11.5px var(--ui);color:var(--ink-3);pointer-events:none;
 }

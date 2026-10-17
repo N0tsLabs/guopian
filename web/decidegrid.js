@@ -24,6 +24,7 @@ const DecideGrid = (() => {
   const { $, esc, api, toast } = G;
 
   let root = null;
+  let zoomEl = null;
   let ids = [];
   let tiles = new Map();   // id -> element
   let cards = new Map();   // id -> 队列里的那张照片
@@ -50,10 +51,16 @@ const DecideGrid = (() => {
         <button class="btn ghost" id="dgEsc">取消</button>
         <button class="btn primary" id="dgCommit">留下这两张</button>
       </div>`;
-    $('body') || document.body;
     document.body.appendChild(root);
 
     $('#dgCancel', root).onclick = () => close();
+
+    // 放大层：单独一个元素，盖住整个窗口
+    zoomEl = document.createElement('div');
+    zoomEl.className = 'dgZoom hidden';
+    zoomEl.innerHTML = '<img alt="" draggable="false"><div class="dgZoomHint">空格 关闭 · 也可以直接点一下</div>';
+    document.body.appendChild(zoomEl);
+    zoomEl.onclick = () => closeZoom();
     $('#dgEsc', root).onclick = () => close();
     $('#dgCommit', root).onclick = () => commit();
 
@@ -229,10 +236,45 @@ const DecideGrid = (() => {
     toast(msg + ' · ⌫ 可整批撤回');
   }
 
+
+/** 放大看当前聚焦的那一张。空格打开，Esc 或点一下关闭。 */
+function openZoom() {
+  const id = ids[focus];
+  if (id == null || !zoomEl) return false;
+  const img = zoomEl.querySelector('img');
+  img.src = '/img/' + id + '/card';
+  zoomEl.classList.remove('hidden');
+  return true;
+}
+
+function closeZoom() {
+  if (!zoomEl || zoomEl.classList.contains('hidden')) return false;
+  zoomEl.classList.add('hidden');
+  return true;
+}
+
+function isZoomed() {
+  return !!zoomEl && !zoomEl.classList.contains('hidden');
+}
+
   function onKey(e) {
     if (!root || root.classList.contains('hidden')) return false;
     const k = e.key;
-    if (k === 'Escape') { e.preventDefault(); close(); return true; }
+    if (k === 'Escape') {
+      e.preventDefault();
+      // 放大中的 Esc 只关放大，不退出网格
+      if (closeZoom()) return true;
+      close();
+      return true;
+    }
+    if (k === ' ') {
+      // 空格 = 放大查看，不是「留下」。
+      // 在网格里「留下」已经有点击这个动作，空格用来仔细看更顺手；
+      // 键盘想标记留下按 K。
+      e.preventDefault();
+      if (isZoomed()) closeZoom(); else openZoom();
+      return true;
+    }
     if (k === 'Enter') { e.preventDefault(); commit(); return true; }
     const move = (d) => {
       const g = chooseLayout();
@@ -246,7 +288,7 @@ const DecideGrid = (() => {
     if (k === 'ArrowRight') { e.preventDefault(); return move(1); }
     if (k === 'ArrowUp') { e.preventDefault(); return move(-chooseLayout().cols); }
     if (k === 'ArrowDown') { e.preventDefault(); return move(chooseLayout().cols); }
-    if (k === ' ' || k === 'k' || k === 'K') {
+    if (k === 'k' || k === 'K') {
       e.preventDefault(); toggle(ids[focus], 'keep'); paint(); return true;
     }
     if (k === 's' || k === 'S') {
