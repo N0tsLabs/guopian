@@ -238,8 +238,10 @@ function renderList() {
       S.multi = false;
 
       S.idx = i;
-      // 不调 render()：整表重建会让缩略图重新请求、列表跳动，
-      // 多选时每点一下闪一次。选择只是几行加个类，改类就够。
+      // render() 是 app.js 注入的（见 configure），它既画列表也换右侧卡片。
+      // 上一版我为了少闪一下把它换成只改类名，结果单击列表右侧完全不动 ——
+      // 那是把"点一下就换图"这条主路断了，比闪一下严重得多。
+      render();
       paintSelection();
       syncGrid();
     };
