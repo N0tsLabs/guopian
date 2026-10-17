@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.Python
+
+# Build output
+build/
+dist/
+release/
+*.spec.bak
+
+# Guopian runtime data
+.cache/
+models/*.task
+.guopian/
+_guopian_rejected/
+catalogs/
+guopian.portable
+
+# Local evaluation data - your own photos must never be committed
+evaluation/testset/
+evaluation/mytestset/
+evaluation/labels.csv
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Kimi WebBridge helper runtime state
+evaluation/.bridge_state.json
+evaluation/.anim_probe.js
+
+# Scratch files the browser probes write and read back
+_cdp.json
+_exit_*.png
+
+# Chromium and matplotlib drop scratch directories in whatever TEMP points at,
+# and in this environment that is inside the working tree -- so one screenshot
+# run leaves a handful of tmpXXXXXX/ behind, each holding a 400 KB font cache.
+# Regenerable, never useful.
+#
+# tmp_split/ is deliberately NOT ignored: it holds the pre-refactor originals of
+# app.js / home.js / index.html, and there is no git history to fall back on yet.
+/tmp*/
+!/tmp_split/
+# the tutorial generates its own throwaway photos here
+demo-photos/
+
+# the Chromium profile the app window uses -- it holds cookies and storage,
+# and it is regenerated on demand. Never commit it.
+window-profile/
+# prefs.json holds the paths of the user's own folders
+prefs.json
+prefs.json.bak
+*.bak
+# scratch screenshots from testing
+docs/img/_*.png

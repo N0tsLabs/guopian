@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>过片 · 首页方案对比</title>
+<style>
+:root{
+  --bg:#0b0c0e; --surface:#131417; --surface-2:#191b1f; --surface-3:#202329;
+  --line:#25282e; --line-2:#31353d; --ink:#e9eaec; --ink-2:#a2a7ae; --ink-3:#6d737b;
+  --accent:#2f9fd8; --accent-ink:#4cb4e8; --keep:#3fb950; --reject:#f85149; --mark:#e0a72a;
+  --ui:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SF Mono",Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#07080a;color:var(--ink);font:14px/1.5 var(--ui);padding:40px 24px 80px}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:20px;font-weight:650;margin:0 0 6px}
+.sub{color:var(--ink-3);font-size:13px;margin:0 0 40px}
+.opt{margin:0 0 46px}
+.opt > header{display:flex;align-items:baseline;gap:12px;margin:0 0 10px;flex-wrap:wrap}
+.tag{font:600 11px/1 var(--mono);letter-spacing:.1em;color:var(--accent-ink);
+     border:1px solid rgba(47,159,216,.35);padding:4px 8px;border-radius:4px}
+.opt h2{font-size:16px;font-weight:640;margin:0}
+.why{color:var(--ink-2);font-size:12.5px;margin:6px 0 0;max-width:60em}
+.why b{color:var(--ink);font-weight:600}
+.why em{font-style:normal;color:var(--reject)}
+.frame{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg);
+       box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.bar{height:34px;display:flex;align-items:center;gap:8px;padding:0 12px;
+     background:var(--surface);border-bottom:1px solid var(--line);font-size:12px;color:var(--ink-2)}
+.bar .sp{flex:1}
+.logo{width:15px;height:15px;color:var(--accent-ink)}
+.screen{height:400px;overflow:hidden;position:relative}
+.cover{background:
+  linear-gradient(135deg,#2a2f38,#161a20);
+  position:relative;overflow:hidden}
+.cover::after{content:'';position:absolute;inset:0;
+  background:radial-gradient(circle at 30% 35%, rgba(255,180,120,.30), transparent 55%),
+             radial-gradient(circle at 70% 70%, rgba(90,150,220,.28), transparent 55%)}
+.pill{font:500 10.5px/1 var(--mono);padding:3px 7px;border-radius:4px;
+      background:var(--surface-3);color:var(--ink-2)}
+.pill.k{color:var(--keep)}.pill.r{color:var(--reject)}.pill.m{color:var(--mark)}
+.act{font-size:11.5px;color:var(--ink-3);border:1px solid var(--line);
+     padding:3px 9px;border-radius:5px;background:var(--surface-2)}
+.act.pri{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 13px;
+     border-radius:6px;font-size:12.5px;font-weight:600;border:1px solid var(--line-2);
+     background:var(--surface-2);color:var(--ink)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* ── A ── */
+.aWrap{padding:0}
+.aHead{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface)}
+.aSearch{flex:1;height:28px;background:var(--surface-2);border:1px solid var(--line);
+         border-radius:6px;color:var(--ink-3);font-size:12px;padding:0 10px;display:flex;align-items:center}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{ text-align:left;font:600 10.5px/1 var(--ui);letter-spacing:.08em;color:var(--ink-3);
+  padding:9px 12px;border-bottom:1px solid var(--line);background:var(--surface)}
+.tbl td{padding:8px 12px;border-bottom:1px solid #1b1d21;color:var(--ink-2)}
+.tbl tr.sel td{background:#16202a;color:var(--ink)}
+.tbl tr.sel td:first-child{box-shadow:inset 2px 0 0 var(--accent)}
+.tbtn{width:26px;height:26px;border-radius:5px;background:var(--surface-2);
+      border:1px solid var(--line);display:inline-grid;place-items:center;color:var(--ink-3);margin-left:4px}
+.aFoot{display:flex;align-items:center;gap:12px;padding:9px 14px;font-size:11.5px;color:var(--ink-3);
+       border-top:1px solid var(--line);background:var(--surface)}
+
+/* ── B ── */
+.bWrap{padding:18px 20px}
+.bHead{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.bTitle{font-size:13px;font-weight:640;color:var(--ink-2)}
+.bGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.bCard{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.bCard .cover{height:98px}
+.bCard .m{padding:9px 11px}
+.bCard .nm{font-size:12.5px;font-weight:600}
+.bCard .st{font:400 11px var(--mono);color:var(--ink-3);margin-top:2px}
+.bHover{outline:2px solid var(--accent);outline-offset:-2px;position:relative}
+.bHover .tools{position:absolute;right:7px;top:7px;display:flex;gap:5px}
+.bHover .tools span{width:22px;height:22px;border-radius:5px;background:rgba(8,9,11,.8);
+  border:1px solid var(--line-2);display:grid;place-items:center;font-size:11px;color:var(--ink)}
+.bRen{background:var(--surface);border:1px solid var(--accent);border-radius:5px;
+      padding:1px 5px;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink);width:96px}
+
+/* ── C ── */
+.cWrap{display:grid;place-items:center;height:400px;padding:24px}
+.drop{width:min(560px,90%);border:1.5px dashed var(--line-2);border-radius:12px;
+      padding:30px;text-align:center;background:var(--surface)}
+.drop h3{margin:0 0 6px;font-size:15px;font-weight:640}
+.drop p{margin:0 0 16px;font-size:12.5px;color:var(--ink-3)}
+.cRecent{position:absolute;left:0;right:0;bottom:0;border-top:1px solid var(--line);
+  background:var(--surface);padding:12px 18px}
+.cRow{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:12.5px}
+.cDot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.cName{font-weight:600}.cMeta{color:var(--ink-3);font:400 11px var(--mono);flex:1}
+.prog{width:70px;height:3px;background:var(--surface-3);border-radius:2px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--keep)}
+
+/* ── D ── */
+.dWrap{display:grid;grid-template-columns:290px 1fr;height:400px}
+.dList{border-right:1px solid var(--line);background:var(--surface);overflow:hidden}
+.dList .hd{padding:9px 13px;font:600 10.5px/1 var(--ui);letter-spacing:.1em;color:var(--ink-3);
+           border-bottom:1px solid var(--line)}
+.dItem{display:flex;align-items:center;gap:10px;padding:9px 13px;border-bottom:1px solid #1b1d21}
+.dItem.on{background:#16202a;box-shadow:inset 2px 0 0 var(--accent)}
+.dThumb{width:40px;height:28px;border-radius:4px;flex:0 0 auto}
+.dItem .nm{font-size:12.5px;font-weight:600;flex:1;min-width:0;
+           white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dItem .n{font:400 10.5px var(--mono);color:var(--ink-3)}
+.dMain{padding:20px 22px;display:flex;flex-direction:column;gap:14px}
+.dBig{height:150px;border-radius:9px}
+.dH{font-size:17px;font-weight:660}
+.dStats{display:flex;gap:22px;font-size:12px;color:var(--ink-3)}
+.dStats b{display:block;font:600 17px var(--mono);color:var(--ink);margin-bottom:2px}
+.dActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>过片 · 首页的四个方向</h1>
+  <p class="sub">同一批数据（1 个项目：100MSDCF，93 张，已决定 50）在四种布局下的样子。挑一个，或者告诉我组合。</p>
+
+  <!-- ─────────────── A ─────────────── -->
+  <section class="opt">
+    <header>
+      <span class="tag">A</span>
+      <h2>项目管理器</h2>
+    </header>
+    <p class="why"><b>最"软件"的一个。</b>没有标语、没有特色介绍，打开就是一张表 —— 名称、张数、进度、最后打开时间，像资源管理器/Finder 的列表视图。密度最高，重命名和移除直接放在每一行右侧的悬停按钮上。<br>
+      适合：你已经很熟悉这软件了，每次打开只想<b>最快进入某个项目继续筛</b>。</p>
+    <div class="frame">
+      <div class="bar">
+        <svg class="logo" viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="13.5" y="3.5" width="19" height="19" rx="3.5" opacity=".28"/><rect x="9" y="8" width="19" height="19" rx="3.5" opacity=".55"/><rect x="4.5" y="12.5" width="19" height="19" rx="3.5"/></svg>
+        <span style="font-weight:600;color:var(--ink)">过片</span>
+        <span class="sp"></span>
+        <span class="act">快捷键</span>
+      </div>
+      <div class="aWrap">
+        <div class="aHead">
+          <span class="btn pri">＋ 打开文件夹</span>
+          <span class="aSearch">搜索项目…</span>
+          <span class="pill">最近打开</span>
+        </div>
+        <table class="tbl">
+          <tr><th style="width:38%">名称</th><th>张数</th><th>进度</th><th>最后打开</th><th style="width:70px"></th></tr>
+          <tr class="sel">
+            <td>100MSDCF</td><td>93</td>
+            <td><span class="pill k">已决定 50</span></td><td>2 分钟前</td>
+            <td><span class="tbtn">✎</span><span class="tbtn">⋯</span></td>
+          </tr>
+          <tr>
+            <td>101MSDCF</td><td>1428</td>
+            <td><span class="pill">未开始</span></td><td>昨天</td>
+            <td><span class="tbtn">✎</span><span class="tbtn">⋯</span></td>
+          </tr>
+          <tr>
+            <td>跑男</td><td>596</td>
+            <td><span class="pill m">已决定 210</span></td><td>3 天前</td>
+            <td><span class="tbtn">✎</span><span class="tbtn">⋯</span></td>
+          </tr>
+          <tr>
+            <td>黄龙</td><td>0</td>
+            <td><span class="pill">空文件夹</span></td><td>上周</td>
+            <td><span class="tbtn">✎</span><span class="tbtn">⋯</span></td>
+          </tr>
+        </table>
+        <div class="aFoot"><span>4 个项目 · 共 2117 张</span><span class="sp" style="flex:1"></span><span>本机处理 · 不联网</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────── B ─────────────── -->
+  <section class="opt">
+    <header>
+      <span class="tag">B</span>
+      <h2>封面网格 + 就地重命名</h2>
+    </header>
+    <p class="why">保留你现在喜欢的<b>真实封面图</b>，但去掉大标语和特色介绍。顶部只有一行：<b>过片</b> + 打开按钮。重命名是<b>就地编辑</b> —— 名字那一行直接变成输入框，不用弹窗。<br>
+      适合：你想一眼看出每个项目拍的是什么，同时又要能改名整理。</p>
+    <div class="frame">
+      <div class="bar">
+        <svg class="logo" viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="13.5" y="3.5" width="19" height="19" rx="3.5" opacity=".28"/><rect x="9" y="8" width="19" height="19" rx="3.5" opacity=".55"/><rect x="4.5" y="12.5" width="19" height="19" rx="3.5"/></svg>
+        <span style="font-weight:600;color:var(--ink)">过片</span>
+        <span class="sp"></span>
+        <span class="btn pri">＋ 打开文件夹</span>
+      </div>
+      <div class="bWrap">
+        <div class="bHead">
+          <span class="bTitle">最近的库</span>
+          <span style="font-size:11.5px;color:var(--ink-3)">按最后打开排序</span>
+        </div>
+        <div class="bGrid">
+          <div class="bCard bHover">
+            <div class="cover" style="position:relative">
+              <span class="tools">
+                <span>✎</span><span>⋯</span>
+              </span>
+            </div>
+            <div class="m">
+              <input class="bRen" value="100MSDCF">
+              <div class="st">50 / 93 已决定</div>
+            </div>
+          </div>
+          <div class="bCard">
+            <div class="cover"></div>
+            <div class="m"><div class="nm">101MSDCF</div><div class="st">1428 张 · 未开始</div></div>
+          </div>
+          <div class="bCard">
+            <div class="cover"></div>
+            <div class="m"><div class="nm">跑男</div><div class="st">210 / 596 已决定</div></div>
+          </div>
+          <div class="bCard">
+            <div class="cover" style="display:grid;place-items:center;font-size:11px;color:var(--ink-3)">空</div>
+            <div class="m"><div class="nm">黄龙</div><div class="st">0 张</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────── C ─────────────── -->
+  <section class="opt">
+    <header>
+      <span class="tag">C</span>
+      <h2>极简启动器</h2>
+    </header>
+    <p class="why"><b>最安静的一个。</b>屏幕正中是一个拖放区，其余全空。最近的项目压缩成底部一条细列表，不抢视线。<br>
+      适合：你的照片在移动硬盘上，每次都是<b>直接拖进来</b>开始新的一批，历史项目只是偶尔回去看看。</p>
+    <div class="frame">
+      <div class="bar">
+        <svg class="logo" viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="13.5" y="3.5" width="19" height="19" rx="3.5" opacity=".28"/><rect x="9" y="8" width="19" height="19" rx="3.5" opacity=".55"/><rect x="4.5" y="12.5" width="19" height="19" rx="3.5"/></svg>
+        <span style="font-weight:600;color:var(--ink)">过片</span>
+        <span class="sp"></span>
+        <span style="font-size:11.5px">v0.1.0</span>
+      </div>
+      <div class="screen">
+        <div class="cWrap">
+          <div class="drop">
+            <h3>把照片文件夹拖到这里</h3>
+            <p>或者从下面挑一个继续</p>
+            <span class="btn pri">选择文件夹…</span>
+          </div>
+        </div>
+        <div class="cRecent">
+          <div class="cRow"><span class="cDot"></span><span class="cName">100MSDCF</span>
+            <span class="cMeta">93 张 · 2 分钟前</span>
+            <span class="prog"><i style="width:54%"></i></span>
+            <span class="act">继续</span><span class="act">✎</span></div>
+          <div class="cRow"><span class="cDot" style="background:var(--ink-3)"></span><span class="cName">101MSDCF</span>
+            <span class="cMeta">1428 张 · 昨天</span>
+            <span class="prog"><i style="width:0%"></i></span>
+            <span class="act">继续</span><span class="act">✎</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────── D ─────────────── -->
+  <section class="opt">
+    <header>
+      <span class="tag">D</span>
+      <h2>左列表 + 右详情</h2>
+    </header>
+    <p class="why"><b>最像专业工具的一个。</b>左边一列项目，右边是选中项目的封面、统计和动作按钮（继续筛选 / 重命名 / 在文件夹中显示 / 移除）。像 Lightroom 的目录面板，或者代码编辑器的项目选择器。<br>
+      适合：项目很多、你要<b>对照着看</b>而不是扫一眼就点进去。</p>
+    <div class="frame">
+      <div class="bar">
+        <svg class="logo" viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="13.5" y="3.5" width="19" height="19" rx="3.5" opacity=".28"/><rect x="9" y="8" width="19" height="19" rx="3.5" opacity=".55"/><rect x="4.5" y="12.5" width="19" height="19" rx="3.5"/></svg>
+        <span style="font-weight:600;color:var(--ink)">过片</span>
+        <span class="sp"></span>
+        <span class="btn pri">＋ 打开文件夹</span>
+      </div>
+      <div class="dWrap">
+        <div class="dList">
+          <div class="hd">项目 · 4</div>
+          <div class="dItem on"><div class="dThumb cover"></div><div class="nm">100MSDCF</div><span class="n">50/93</span></div>
+          <div class="dItem"><div class="dThumb cover"></div><div class="nm">101MSDCF</div><span class="n">0/1428</span></div>
+          <div class="dItem"><div class="dThumb cover"></div><div class="nm">跑男</div><span class="n">210/596</span></div>
+          <div class="dItem"><div class="dThumb" style="background:var(--surface-3)"></div><div class="nm">黄龙</div><span class="n">0</span></div>
+        </div>
+        <div class="dMain">
+          <div class="dBig cover"></div>
+          <div class="dH">100MSDCF</div>
+          <div class="dStats">
+            <span><b>93</b>张数</span>
+            <span><b>50</b>已决定</span>
+            <span><b>4</b>有问题</span>
+            <span><b>2 分钟前</b>最后打开</span>
+          </div>
+          <div style="font:400 11px var(--mono);color:var(--ink-3)">D:\image cache\川西\100MSDCF</div>
+          <div class="dActions">
+            <span class="btn pri">继续筛选 →</span>
+            <span class="btn">✎ 重命名</span>
+            <span class="btn">在文件夹中显示</span>
+            <span class="btn" style="color:var(--reject)">从列表移除</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

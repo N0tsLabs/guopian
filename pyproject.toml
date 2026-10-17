@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "guopian"
+version = "0.1.0"
+description = "过片 Guopian - local, offline photo culling. Nothing is uploaded, nothing is deleted."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "N0ts", email = "mail@n0ts.top" }]
+keywords = ["photography", "culling", "photo-management", "offline", "privacy"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: X11 Applications",
+  "Environment :: Win32 (MS Windows)",
+  "Environment :: MacOS X",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Multimedia :: Graphics :: Viewers",
+]
+dependencies = [
+  "pillow>=10.0",
+  "numpy>=1.24",
+  "opencv-python>=4.8; platform_system != 'Linux'",
+  "opencv-python-headless>=4.8; platform_system == 'Linux'",
+  "flask>=3.0",
+  "mediapipe>=0.10",
+  "pillow-heif>=0.15",
+]
+
+[project.urls]
+Homepage = "https://github.com/N0ts/guopian"
+Issues = "https://github.com/N0ts/guopian/issues"
+
+[project.scripts]
+guopian = "run:main"
+
+[tool.setuptools]
+packages = ["guopian"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]

@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""Encapsulation guards.
+
+These are the two rules that this project has already broken once, in ways that
+produced NO error and were only noticed by looking at the screen:
+
+  1. Decision wording was written down in four places (config.py, app.js, and
+     twice in index.html). Renaming one of them left the others behind.
+  2. Colours were written as literals in seventeen places outside :root, so
+     changing the palette meant hunting for hex codes.
+
+A rule that is not checked is a rule that will drift. Run this with the other
+evaluation scripts; it needs no server and no browser.
+
+    python evaluation/hygiene.py
+"""
+from __future__ import annotations
+
+import io
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+WEB = os.path.join(ROOT, "web")
+
+# The canonical words live in config.py only. If a rename happens, these are
+# whatever config says -- the check is that nothing ELSE spells them out.
+sys.path.insert(0, ROOT)
+
+fails: list[str] = []
+notes: list[str] = []
+
+
+def check(ok: bool, msg: str, detail: str = "") -> None:
+    print("  [{}] {}".format("OK  " if ok else "FAIL", msg) + ("  " + detail if detail else ""))
+    if not ok:
+        fails.append(msg)
+
+
+def read(rel: str) -> str:
+    with io.open(os.path.join(ROOT, rel), encoding="utf-8") as fh:
+        return fh.read()
+
+
+def main() -> int:
+    try:
+        from guopian import config
+        words = list(config.DECISION_LABELS.values())
+    except Exception as exc:                                    # pragma: no cover
+        print("  cannot import config: {}".format(exc))
+        return 2
+
+    html = read("web/index.html")
+    appjs = read("web/app.js")
+    homejs = read("web/home.js")
+    css = read("web/style.css")
+
+    print("\n== 1. 决策用词只有 config.py 一个真源 ==")
+
+    # a) THE WORD STANDING ALONE IN ITS OWN ELEMENT, e.g. <b>要</b>, and the
+    #    "标为要" buttons in the grid, where it is glued to a known prefix.
+    #
+    #    What is deliberately NOT checked: the word inside a sentence. "这张我要"
+    #    and "我要，而且这是里面最好的" are prose -- 要 is doing its ordinary job
+    #    as a verb, and "不需要" contains it by accident. A regex cannot tell a
+    #    label from a sentence in Chinese, and a check that cries wolf on prose
+    #    gets switched off within a week, which is worse than not having it.
+    #    So this covers the shapes that ARE unambiguous, which is where the
+    #    duplication actually happened.
+    alt = "|".join(map(re.escape, words))
+    bare = re.findall(r">\s*({})\s*<".format(alt), html)
+    glued = re.findall(r"标为\s*({})\s*<".format(alt), html)
+    check(not bare and not glued, "index.html 的决策词都走 data-label 占位符",
+          "found {} {}".format(bare, glued) if (bare or glued)
+          else "{} 处占位符".format(html.count("data-label=")))
+
+    # b) no JS object literal spelling them out, e.g. keep: '要'
+    lit = re.findall(r"\b(?:keep|reject|mark)\s*:\s*'({})'".format(
+        "|".join(map(re.escape, words))), appjs)
+    check(not lit, "app.js 里没有决策词字面量", "found {}".format(lit) if lit else "")
+
+    # c) the placeholders must all be keys the backend actually sends
+    try:
+        from guopian import config as c2
+        keys = set(c2.DECISION_LABELS)
+    except Exception:
+        keys = set()
+    ph = set(re.findall(r'data-label="(\w+)"', html))
+    check(ph <= keys, "data-label 占位符都有对应的下发键",
+          "{} -> {}".format(sorted(ph), sorted(keys)) if ph else "")
+
+    print("\n== 2. 颜色只写在 :root 里 ==")
+
+    # strip comments, then everything up to the end of the :root block
+    body = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    m = re.search(r":root\s*\{.*?\}", body, flags=re.S)
+    outside = body[m.end():] if m else body
+    hexes = re.findall(r"#[0-9a-fA-F]{3,8}\b", outside)
+    # rgba()/rgb() literals are allowed where the colour is a veil or a shadow:
+    # they are alpha composites over photography, not palette entries.
+    check(not hexes, "style.css 的 :root 之外没有 #hex",
+          "{} 处: {}".format(len(hexes), sorted(set(hexes))[:8]) if hexes else "")
+
+    print("\n== 3. 前端零依赖、无构建步骤 ==")
+
+    scripts = re.findall(r'<script[^>]*\bsrc="([^"]+)"', html)
+    external = [s for s in scripts if s.startswith(("http://", "https://", "//"))]
+    check(not external, "没有外链脚本", "found {}".format(external) if external else
+          "{} 个本地脚本".format(len(scripts)))
+    check(not os.path.exists(os.path.join(ROOT, "package.json")),
+          "没有 package.json（保持无构建步骤）")
+
+    print("\n== 4. 模块依赖显式声明 ==")
+    for name in ("app.js", "home.js"):
+        src = read("web/" + name)
+        head = src[:1400]
+        ok = "@requires" in head or "import " in head
+        check(ok, "{} 在文件头声明了它依赖什么".format(name))
+
+    print("\n== 5. 组件只有一个基类 ==")
+    # Two .btn blocks with different heights once coexisted: the second silently
+    # won, and the home page ended up with its own vocabulary (.pri) for what the
+    # rest of the app called .primary.
+    n = len(re.findall(r"(^|\n)\.btn\s*\{", css))
+    check(n == 1, "样式表里只有一个 .btn 基类", "{} 个".format(n))
+    orphan = [c for c in (".projAdd", ".cta")
+              if re.search(r"(^|\n)\." + c[1:] + r"\s*\{", css)]
+    check(not orphan, "没有各自为政的按钮样式",
+          "found {}".format(orphan) if orphan else "")
+
+    print()
+    if fails:
+        print("===== {} 项未通过 =====".format(len(fails)))
+        for f in fails:
+            print("  - " + f)
+        return 1
+    print("===== 全部通过 =====")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

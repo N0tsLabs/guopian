@@ -1,0 +1,1718 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   过片 Guopian — design system
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Direction comes from the ui-ux-pro-max knowledge base:
+     product match  "Photo Editor & Filters"
+     style          Minimalism & Swiss Style + Dark Mode (OLED)
+     density        8/10 (dense / dashboard)
+     palette        dark ground, hairline borders, one accent
+     anti-patterns  no gradients, no decorative shadow, no emoji icons
+
+   Three deliberate deviations, each for a stated reason:
+
+   1. Ground is a NEUTRAL near-black (#0B0C0E), not the generated #0F172A.
+      #0F172A is blue-tinted; a coloured surround shifts how you read the
+      colour of the photo sitting on it. A photo tool needs a neutral ground.
+
+   2. Fonts are system stacks, not Google Fonts. Guopian is offline-first --
+      a webfont would be a network dependency and megabytes in the package.
+      The stacks below reproduce the intended character (technical, precise)
+      with fonts already installed on each platform.
+
+   3. Radii are 0-2px rather than the generated 8-12px. Swiss discipline is
+      sharp geometry; the photographs are the only soft, colourful thing on
+      screen and nothing should compete with them.
+
+   Colour is never the only signal: every decision carries a glyph
+   (✓ / ✕ / ★ / ○) and a text label as well as a colour.
+   (✓ / ✕ / ~ / ○) and a text label as well.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root{
+  /* surfaces — neutral, no hue cast */
+  --bg:        #0b0c0e;
+  --canvas:    #08090b;   /* behind the photo: darker still */
+  --surface:   #121417;
+  --surface-2: #171a1e;
+  --surface-3: #1d2126;
+
+  /* structure */
+  --line:        rgba(255,255,255,.08);
+  --line-strong: rgba(255,255,255,.15);
+  --line-faint:  rgba(255,255,255,.045);
+
+  /* ink — all measured >= 4.5:1 on --bg */
+  --ink:    #f2f4f7;
+  --ink-2:  #a8b0bb;
+  --ink-3:  #7d8590;
+
+  /* one accent. cyan reads as instrument, and stays clear of the three
+     semantic decision colours so it can never be mistaken for a verdict. */
+  --accent:      #0891b2;
+  --accent-ink:  #22d3ee;
+  --accent-dim:  rgba(34,211,238,.12);
+  --accent-line: rgba(34,211,238,.5);
+
+  /* decisions — three judgements about a photo, never file operations */
+  --keep:      #3fb950;   /* 确认 */
+  --keep-ink:  #7ee787;
+  --keep-dim:  rgba(63,185,80,.14);
+  --reject:    #f85149;   /* 不要 */
+  --reject-ink:#ffa39c;
+  --reject-dim:rgba(248,81,73,.14);
+  --mark:      #e0a72a;   /* 收藏 -- gold: the one decision that is additive */
+  --mark-ink:  #f5cd5c;
+  --mark-dim:  rgba(224,167,42,.16);
+  --idle:      #6e7681;   /* 还没审 */
+
+  /* issue severity -- a separate scale from decisions, so "medium severity"
+     and "I like this one" can never be confused for each other */
+  --warn:      #d29922;
+  --warn-ink:  #f0c850;
+  --warn-dim:  rgba(210,153,34,.16);
+
+  /* spacing — density 8/10 */
+  --s1:2px; --s2:4px; --s3:8px; --s4:12px; --s5:16px; --s6:24px; --s7:32px;
+
+  /* geometry — Swiss: sharp */
+  --r:0px; --r2:2px; --r3:3px;
+
+  /* type */
+  --ui: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
+        "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei",
+        system-ui, sans-serif;
+  --mono: "Cascadia Mono", "SF Mono", "JetBrains Mono", Consolas,
+          "Liberation Mono", monospace;
+
+  /* motion -- Apple-style curves.
+     The Material standard (.4,0,.2,1) spends its first third barely moving,
+     which next to iOS reads as "laggy": the system already responded, the
+     pixels just have not caught up. Apple's curve leaves the start almost
+     immediately and takes its whole tail to settle. */
+  --ease-ios: cubic-bezier(.32,.72,0,1);
+  --spring:   cubic-bezier(.34,1.4,.5,1);     /* a real snap-back, with overshoot */
+  --drop:     cubic-bezier(.5,0,.85,.35);     /* accelerating, for discards */
+
+  --t-fast: 170ms var(--ease-ios);
+  --t:      260ms var(--ease-ios);
+  --t-slow: 380ms var(--ease-ios);
+  /* how long the card takes to spring home after a drag that did not commit */
+  --t-snap: 420ms var(--spring);
+
+  --shadow: 0 24px 60px rgba(0,0,0,.7);
+
+  --topbar-h: 44px;
+  --actionbar-h: 66px;
+  --list-w: 268px;
+
+  /* ── text ON a filled surface ──
+     Each solid fill in the palette needs a readable foreground, and it is not
+     always white: the gold "collect" fill is light, so it takes near-black. */
+  --on-accent:#001014;
+  --on-solid:#ffffff;
+  --on-mark:#191200;
+
+  /* ── the high-severity amber ──
+     Distinct from --warn: this is the lighter one used for "worth a look"
+     markers (face flags, issue tags), where --warn would read as an error. */
+  --sev-high:#ffbe85;
+
+  /* ── scrollbars ──
+     Not part of the surface scale: these have to stay visible against --bg
+     without competing with the content. */
+  --scroll:#272b31;
+  --scroll-hover:#363b43;
+
+  /* similar-group colours: eight hues, distinguishable at 3px wide and as a
+     small chip, and clearly distinct from the decision colours (green/red/gold) */
+  --g0:#5eb0ff;  --g1:#c792ea;  --g2:#4dd0c1;  --g3:#f78fb3;
+  --g4:#a3d977;  --g5:#f0a35e;  --g6:#8fa6ff;  --g7:#e0c36a;
+  --g8:#7ee0d0;  --g9:#d99bf0;  --g10:#9ecbff; --g11:#ffb3a7;
+  --g12:#b8e986; --g13:#ffd479; --g14:#a8b8ff; --g15:#f9a8d4;
+
+  /* the tour replica's decorative gradients -- placeholder colours, not part of
+     the app's palette, but they still live here so every colour in this file is
+     declared in one place. */
+  --mock-cover-a:#243a34;  --mock-cover-b:#16202a;
+  --mock-cover-c:#3a2a3a;  --mock-cover-d:#1a1620;
+  --mock-thumb-a:#2b3a2e;  --mock-thumb-b:#1a2028;
+  --mock-thumb-c:#33405a;  --mock-thumb-d:#1b2230;
+  --mock-thumb-e:#4a3a2e;  --mock-thumb-f:#241c18;
+  --mock-thumb-g:#3a3050;  --mock-thumb-h:#1e1a2a;
+  --mock-photo-a:#3a4a6a;  --mock-photo-b:#2a3a2e;  --mock-photo-c:#1e2a22;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+
+/* ── drag progress ──
+   Three numbers in 0..1 that drive the whole drag gesture: how far the card
+   has been pulled towards 不要 (--pl), towards 要 (--pr), and towards 收藏
+   (--pm). Registering them as typed custom properties is what makes them
+   *animatable*: JS writes a number every mousemove and the CSS below reads it,
+   and on release the transition on .photoStage springs all three back to zero
+   without JS having to animate anything frame by frame. */
+@property --pl { syntax:"<number>"; inherits:true; initial-value:0 }
+@property --pr { syntax:"<number>"; inherits:true; initial-value:0 }
+@property --pm { syntax:"<number>"; inherits:true; initial-value:0 }
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:400 13px/1.45 var(--ui);
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  overflow:hidden;
+}
+button,input,select{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+::selection{background:var(--accent);color:var(--on-accent)}
+
+/* focus: one visible ring for every control, never removed without replacement */
+:focus{outline:none}
+:focus-visible{
+  outline:2px solid var(--accent-ink);
+  outline-offset:2px;
+  border-radius:var(--r2);
+}
+.hidden{display:none !important}
+.spacer{flex:1}
+.muted{color:var(--ink-3)}
+.small{font-size:11.5px;line-height:1.5}
+
+kbd{
+  display:inline-block;min-width:17px;padding:0 4px;
+  font:500 10.5px/16px var(--mono);text-align:center;
+  color:var(--ink);background:var(--surface-2);
+  border:1px solid var(--line-strong);border-radius:var(--r2);
+}
+code{font:400 11.5px var(--mono);color:var(--ink-2);
+  background:var(--surface-2);padding:1px 5px;border-radius:var(--r2)}
+
+/* scrollbars — thin, monochrome, out of the way */
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--scroll);border:2px solid var(--bg);border-radius:5px}
+::-webkit-scrollbar-thumb:hover{background:var(--scroll-hover)}
+
+/* ═══════════════════════════════ views ═══════════════════════════════ */
+
+.view{position:fixed;inset:0;display:flex;flex-direction:column}
+
+/* ═══════════════════════════════ top bar ═══════════════════════════════ */
+
+.topbar{
+  flex:0 0 auto;height:var(--topbar-h);
+  display:flex;align-items:center;gap:var(--s4);
+  padding:0 var(--s4);
+  background:var(--bg);border-bottom:1px solid var(--line);
+}
+.topbar.bare{background:transparent;border-bottom-color:transparent}
+
+.brandmark{
+  display:flex;align-items:center;gap:var(--s3);
+  font-size:13.5px;font-weight:600;letter-spacing:.02em;color:var(--ink);
+}
+.topbar .brandmark.small{cursor:pointer;padding:var(--s2) var(--s3);
+  margin-left:-8px;border-radius:var(--r2);transition:background var(--t-fast)}
+.topbar .brandmark.small:hover{background:var(--surface-2)}
+.mark{display:block;color:var(--accent-ink);flex:0 0 auto}
+
+.pathChip{
+  font:400 11.5px var(--mono);color:var(--ink-2);
+  padding:3px var(--s3);border:1px solid var(--line);border-radius:var(--r2);
+  background:var(--surface);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-width:34vw;direction:rtl;text-align:left;
+}
+
+.progressWrap{display:flex;align-items:center;gap:var(--s3);min-width:0}
+.progressBar{
+  width:96px;height:3px;background:var(--surface-3);
+  border-radius:2px;overflow:hidden;flex:0 0 auto;
+}
+.progressBar i{display:block;height:100%;width:0;background:var(--accent-ink);
+  transition:width var(--t-slow)}
+.progressText{font:400 11px var(--mono);color:var(--ink-3);white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+
+.topRight{display:flex;align-items:center;gap:var(--s2);margin-left:auto}
+
+.version{font:400 10.5px var(--mono);color:var(--ink-3);letter-spacing:.04em}
+
+.roBadge{
+  font:600 10px/1 var(--ui);letter-spacing:.1em;text-transform:uppercase;
+  color:var(--warn-ink);border:1px solid rgba(210,153,34,.45);
+  padding:4px 7px;border-radius:var(--r2);
+}
+
+/* icon buttons — 30px visual, expanded hit area, consistent stroke */
+.iconbtn{
+  width:30px;height:30px;display:grid;place-items:center;
+  color:var(--ink-2);border:1px solid transparent;border-radius:var(--r2);
+  transition:background var(--t-fast),color var(--t-fast),border-color var(--t-fast);
+}
+.iconbtn:hover{background:var(--surface-2);color:var(--ink);border-color:var(--line)}
+.iconbtn.tiny{width:22px;height:22px}
+.iconbtn svg{display:block}
+
+/* ═══════════════════════════════ buttons ═══════════════════════════════ */
+
+.btn{
+  display:inline-flex;align-items:center;gap:var(--s3);
+  height:30px;padding:0 var(--s4);
+  font-size:12.5px;font-weight:550;letter-spacing:.01em;
+  border:1px solid var(--line-strong);border-radius:var(--r2);
+  background:var(--surface);color:var(--ink);
+  transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);
+  white-space:nowrap;
+}
+.btn:hover{background:var(--surface-3);border-color:var(--line-strong)}
+.btn:active{background:var(--surface-2)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{
+  background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600;
+}
+.btn.primary:hover{background:var(--accent-ink);border-color:var(--accent-ink)}
+.btn.ghost{background:transparent}
+.btn.ghost:hover{background:var(--surface-2)}
+/* A destructive action: the label carries the warning colour, and the surface
+   only reddens on hover, so a row of buttons does not read as an alarm. */
+.btn.danger{color:var(--reject)}
+.btn.danger:hover{background:var(--reject-dim);border-color:var(--reject)}
+/* Full-width, for the one primary action at the foot of a panel. */
+.btn.block{width:100%;justify-content:center;height:34px}
+.btn.lg{height:34px;padding:0 var(--s5);font-weight:600}
+
+.linkbtn{
+  color:var(--ink-3);font-size:11.5px;text-decoration:underline;
+  text-underline-offset:3px;text-decoration-color:var(--line-strong);
+  transition:color var(--t-fast);
+}
+.linkbtn:hover{color:var(--ink-2)}
+
+.select{
+  height:30px;padding:0 var(--s3);
+  background:var(--surface);color:var(--ink);
+  border:1px solid var(--line-strong);border-radius:var(--r2);
+  font-size:12px;cursor:pointer;
+}
+.select:hover{background:var(--surface-2)}
+
+/* ═══════════════════════════════ home ═══════════════════════════════ */
+
+/* margin:auto centres on both axes without the top-clipping you get from
+   align-items:center once the content is taller than the viewport. */
+/* ── home: a project manager, not a landing page ──
+   Nothing here tries to sell the software to someone who has not installed it.
+   Left is what you have; right is what you can do with the one you picked. */
+.homeScroll{flex:1;overflow-y:auto;display:flex}
+/* Full width, flush to the edges. A max-width with auto margins turned the rail
+   into a floating panel with dead space beside it, which reads as a centred web
+   page rather than a desktop window. The project grid centres itself instead. */
+.homeBody{
+  width:100%;
+  display:grid;grid-template-columns:300px minmax(0,1fr);min-height:100%;
+}
+
+/* ── left: who this software is ──
+   Identity lives in a fixed-width rail so the project area can use the full
+   remaining width. Putting the title and the one-line description on the same
+   line as the projects (the previous layout) left the right half of an
+   otherwise near-empty screen blank whenever there were only one or two. */
+.homeRail{
+  display:flex;flex-direction:column;min-width:0;
+  padding:clamp(24px,4vh,40px) var(--s5);
+  border-right:1px solid var(--line);
+  background:var(--surface);
+}
+.railTitle{
+  margin:var(--s6) 0 0;
+  font-size:23px;line-height:1.28;font-weight:680;letter-spacing:-.025em;
+  color:var(--ink);
+}
+.railTitle em{font-style:normal;color:var(--accent-ink)}
+.railLine{
+  margin:var(--s4) 0 0;max-width:26em;
+  font-size:12px;line-height:1.85;color:var(--ink-3);
+}
+.railLine strong{color:var(--ink-2);font-weight:600}
+.railOpen{margin-top:var(--s6)}
+.railFoot{
+  margin-top:auto;padding-top:var(--s5);
+  display:flex;align-items:center;gap:var(--s4);flex-wrap:wrap;
+}
+
+@media (max-width:820px){
+  .homeBody{grid-template-columns:1fr}
+  .homeRail{border-right:0;border-bottom:1px solid var(--line)}
+  .railTitle{font-size:20px}
+}
+
+/* ── right: what is on this machine ──
+   auto-FIT, not auto-fill, and centred: with one project that is a single
+   centred card rather than the first of three slots with two holes after it.
+   Centring is the whole reason this layout survives having one project. */
+.homeMain{
+  display:flex;flex-direction:column;min-width:0;
+  padding:clamp(20px,3.4vh,34px) clamp(18px,2.6vw,34px);
+}
+.mainHead{
+  display:flex;align-items:center;gap:8px;
+  padding-bottom:var(--s3);margin-bottom:var(--s5);
+  border-bottom:1px solid var(--line);
+  font:600 10px/1 var(--ui);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3);
+}
+.mainHead b{font:600 10px var(--mono)}
+.mainHead .sp{flex:1}
+/* A real button, not a body-text link. .linkbtn is an underlined 11.5px inline
+   link meant for prose; in a section header it read as a stray word. */
+.mainHead .linkbtn{
+  font-size:11px;font-weight:550;letter-spacing:0;text-transform:none;
+  color:var(--ink-3);text-decoration:none;
+  padding:3px 9px;border-radius:var(--r2);
+  border:1px solid var(--line);background:var(--surface-2);
+  transition:color var(--t-fast),border-color var(--t-fast),background var(--t-fast);
+}
+.mainHead .linkbtn:hover{color:var(--ink);border-color:var(--ink-3);background:var(--surface-3)}
+/* Left to right, row by row, like every file manager there is.
+   An earlier version centred this so a single project would not look lonely --
+   which was the wrong trade: it stopped being a list. A grid that starts at the
+   left and leaves the tail of the last row empty is not a defect, it is what a
+   grid looks like. auto-FILL rather than auto-fit so the columns keep their
+   width instead of stretching when there is only one. */
+.projGrid{
+  display:grid;grid-template-columns:repeat(auto-fill,248px);
+  gap:var(--s4);align-content:start;
+}
+.projCard{
+  position:relative;display:flex;flex-direction:column;text-align:left;
+  padding:0;overflow:hidden;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r2);
+  transition:border-color var(--t-fast),background var(--t-fast),transform var(--t-fast);
+}
+.projCard:hover{background:var(--surface-2);border-color:var(--ink-3);transform:translateY(-2px)}
+.projCard:active{transform:translateY(0)}
+.projCard:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px}
+.cardCover{
+  position:relative;display:block;aspect-ratio:3/2;
+  background:var(--canvas);overflow:hidden;
+}
+.cardCover img{
+  display:block;width:100%;height:100%;object-fit:cover;
+  transition:transform 460ms var(--ease-ios);
+}
+.projCard:hover .cardCover img{transform:scale(1.04)}
+.cardMeta{display:flex;flex-direction:column;gap:3px;min-width:0;padding:9px 11px 11px}
+.cardName{
+  font-size:12.5px;font-weight:600;color:var(--ink);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.cardStat{font:400 10.5px var(--mono);color:var(--ink-3);font-variant-numeric:tabular-nums}
+.cardBar{display:block;height:2px;margin-top:6px;border-radius:1px;
+  background:var(--surface-3);overflow:hidden}
+.cardBar i{display:block;height:100%;background:var(--keep);transition:width 300ms var(--ease-ios)}
+/* Actions sit on the cover and only appear on hover, so the card stays a
+   picture of the shoot rather than a toolbar. */
+.cardActs{
+  position:absolute;right:6px;top:6px;display:flex;gap:4px;
+  opacity:0;transition:opacity var(--t-fast);
+}
+.projCard:hover .cardActs,.projCard:focus-within .cardActs{opacity:1}
+.cardActs span{
+  width:24px;height:24px;display:grid;place-items:center;border-radius:var(--r2);
+  font-size:11px;color:var(--on-solid);background:rgba(8,9,11,.76);
+  backdrop-filter:blur(6px);border:1px solid var(--line-strong);
+}
+.cardActs span:hover{background:var(--surface-3)}
+.cardActs span[data-act="forget"]:hover{background:var(--reject)}
+.renameBox{
+  width:100%;font:inherit;font-size:12.5px;font-weight:600;
+  color:var(--ink);background:var(--surface-2);
+  border:1px solid var(--accent);border-radius:var(--r2);padding:1px 5px;outline:none;
+}
+.mainEmpty{
+  margin:auto;max-width:30em;text-align:center;
+  font-size:13px;line-height:2;color:var(--ink-2);
+}
+.mainEmpty span{font-size:12px;color:var(--ink-3)}
+
+/* the help button, floating in the corner now that the home screen has no bar */
+/* Sits in the same row as `.mainHead`, so it uses the SAME padding maths that
+   row does. Hard-coded 12px/10px put the help button in its own coordinate
+   system and it never lined up with the 清空 button two elements below it. */
+/* The help button now lives inside .mainHead, next to 清空. It used to be
+   absolutely positioned in its own corner, which meant two separate coordinate
+   systems trying to land on one row -- they overlapped.
+   .mainHead aligns on the baseline of its 10px label, so the icon is nudged to
+   sit centred on that line rather than on the box. */
+/* Same box height as the 清空 button beside it. Centres aligning is not enough:
+   a 30px tall icon next to a 19px tall button still reads as two different
+   rows, even though their centres are identical. */
+.mainHead .iconbtn{
+  flex:0 0 auto;padding:0;width:19px;height:19px;
+  display:flex;align-items:center;justify-content:center;
+}
+.mainHead .iconbtn svg{display:block}
+
+/* ── the brand block in the rail ── */
+.brandmark{
+  display:flex;align-items:center;gap:9px;
+  font-size:15px;font-weight:660;letter-spacing:-.01em;
+}
+.ghLink{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:4px 9px;border-radius:var(--r2);
+  font-size:11.5px;font-weight:550;color:var(--ink-3);
+  border:1px solid var(--line);background:var(--surface-2);
+  transition:color var(--t-fast),border-color var(--t-fast),background var(--t-fast);
+}
+.ghLink:hover{color:var(--ink);border-color:var(--ink-3);background:var(--surface-3)}
+.ctaHint{margin-top:8px;font-size:11px;color:var(--ink-3);min-height:14px;text-align:center}
+.ctaHint:empty{display:none}
+
+/* ═══════════════════════════════ triage chips ═══════════════════════════════ */
+
+.triage{
+  flex:0 0 auto;display:flex;align-items:center;gap:var(--s4);
+  padding:var(--s3) var(--s4);
+  border-bottom:1px solid var(--line);background:var(--bg);
+}
+.triageLabel{
+  font:600 10px/1 var(--ui);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3);flex:0 0 auto;
+}
+.chips{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.chip{
+  display:inline-flex;align-items:center;gap:5px;
+  height:24px;padding:0 9px;
+  font-size:11.5px;color:var(--ink-2);
+  background:transparent;border:1px solid var(--line);border-radius:var(--r2);
+  transition:color var(--t-fast),border-color var(--t-fast),background var(--t-fast);
+}
+.chip:hover{color:var(--ink);border-color:var(--line-strong);background:var(--surface)}
+.chip.on{
+  color:var(--accent-ink);border-color:var(--accent-line);background:var(--accent-dim);
+}
+.chip .n{
+  font:500 10px var(--mono);color:var(--ink-3);
+  font-variant-numeric:tabular-nums;
+}
+.chip.on .n{color:var(--accent-ink)}
+
+/* ═══════════════════════════════ stage ═══════════════════════════════ */
+
+.stageWrap{flex:1;display:flex;min-height:0;background:var(--bg)}
+
+/* ── left photo list ── */
+.listPane{
+  flex:0 0 var(--list-w);width:var(--list-w);max-width:var(--list-w);min-width:0;
+  display:flex;flex-direction:column;min-height:0;
+  background:var(--bg);border-right:1px solid var(--line);
+}
+.listHead{
+  display:flex;align-items:center;gap:var(--s3);
+  padding:var(--s3) var(--s4);flex:0 0 auto;min-width:0;
+  border-bottom:1px solid var(--line);
+}
+.lhTitle{
+  font:600 10px/1 var(--ui);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.lhCount{
+  font:400 10.5px var(--mono);color:var(--ink-3);margin-left:auto;flex:0 0 auto;
+  font-variant-numeric:tabular-nums;
+}
+.listProgress{height:2px;background:var(--surface-2);flex:0 0 auto}
+.listProgress i{display:block;height:100%;width:0;background:var(--keep);
+  transition:width var(--t-slow)}
+
+.listSummary{
+  display:flex;align-items:center;gap:var(--s2);flex-wrap:wrap;
+  padding:var(--s3) var(--s4);flex:0 0 auto;min-width:0;
+  border-bottom:1px solid var(--line);
+}
+.sumChip{
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:10.5px;color:var(--ink-3);
+  background:transparent;border:1px solid var(--line);border-radius:var(--r2);
+  padding:2px 7px;white-space:nowrap;
+  transition:color var(--t-fast),border-color var(--t-fast),background var(--t-fast);
+}
+.sumChip:hover{background:var(--surface);color:var(--ink)}
+.sumChip.on{background:var(--surface-3);border-color:var(--line-strong);color:var(--ink)}
+.sumChip i{width:5px;height:5px;background:var(--idle);flex:0 0 auto}
+.sumChip.keep i{background:var(--keep)}
+.sumChip.reject i{background:var(--reject)}
+.sumChip.mark i{background:var(--mark)}
+.sumChip.none i{background:var(--line-strong)}
+.sumChip b{color:var(--ink-2);font-weight:600;font-variant-numeric:tabular-nums}
+.sumChip:hover b{color:var(--ink)}
+
+.listScroll{
+  flex:1;overflow-y:auto;overflow-x:hidden;
+  padding:var(--s2) 0 var(--s4);
+  scroll-padding:var(--s4) 0;
+}
+
+.listItem{
+  display:flex;align-items:center;gap:var(--s3);
+  width:100%;padding:2px var(--s4) 2px var(--s3);margin:0;
+  text-align:left;position:relative;
+  background:transparent;border-left:2px solid transparent;
+  transition:background var(--t-fast);
+}
+.listItem:hover{background:var(--surface)}
+.listItem .bar{display:none}                 /* replaced by the left border */
+.listItem{--dec:transparent}
+.listItem.keep{border-left-color:var(--keep)}
+.listItem.reject{border-left-color:var(--reject)}
+.listItem.mark{border-left-color:var(--mark)}
+
+/* The border is load-bearing, not decoration: against a near-black ground a
+   dark night photo is indistinguishable from its own frame, so the outline is
+   what tells you a thumbnail is there at all. */
+.listItem .thumbWrap{
+  width:42px;height:30px;flex:0 0 auto;overflow:hidden;
+  background:var(--surface-2);position:relative;
+  border:1px solid var(--line);
+}
+.listItem .thumbWrap img{
+  width:100%;height:100%;object-fit:cover;display:block;opacity:0;
+  transition:opacity var(--t);
+}
+.listItem .thumbWrap img.loaded{opacity:1}
+.listItem .num{
+  position:absolute;left:0;bottom:0;
+  font:500 8.5px/11px var(--mono);color:var(--ink-2);
+  background:rgba(0,0,0,.72);padding:0 3px;
+  font-variant-numeric:tabular-nums;
+}
+.listItem .info{flex:1;min-width:0;display:flex;flex-direction:column}
+.listItem .nm{
+  font-size:11.5px;line-height:15px;color:var(--ink-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.listItem .fl{
+  font:400 9.5px/12px var(--mono);color:var(--ink-3);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.listItem .fl .sev-fatal{color:var(--reject-ink)}
+.listItem .fl .sev-high{color:var(--sev-high)}
+.listItem .fl .sev-medium{color:var(--warn-ink)}
+
+/* the state glyph — colour is never the only signal */
+.listItem .mark{
+  width:14px;height:14px;flex:0 0 auto;display:grid;place-items:center;
+  font:600 10px/1 var(--mono);color:var(--idle);
+  border:1px solid var(--line-strong);border-radius:50%;
+}
+.listItem .mark svg{display:none}
+.listItem .mark::after{content:"○"}
+.listItem.keep .mark{color:var(--keep-ink);border-color:var(--keep)}
+.listItem.keep .mark::after{content:"✓"}
+.listItem.reject .mark{color:var(--reject-ink);border-color:var(--reject)}
+.listItem.reject .mark::after{content:"✕"}
+.listItem.mark .mark{color:var(--mark-ink);border-color:var(--mark)}
+.listItem.mark .mark::after{content:"★"}
+
+.listItem.keep .nm,.listItem.reject .nm,.listItem.mark .nm{color:var(--ink)}
+
+.listItem.current{background:var(--surface-2)}
+.listItem.current .nm{color:var(--ink);font-weight:600}
+.listItem.current::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  box-shadow:inset 0 0 0 1px var(--accent-line);
+}
+
+/* A decision lands here too -- one quick pulse so the row you just changed is
+   findable again when you scroll back. */
+.listItem.pulse{animation:rowPulse 420ms var(--spring)}
+@keyframes rowPulse{
+  0%  {background:var(--surface-3)}
+  60% {background:var(--surface-3)}
+  100%{background:transparent}
+}
+.listItem.pulse.current{animation:rowPulseCurrent 420ms var(--spring)}
+@keyframes rowPulseCurrent{
+  0%  {background:var(--surface-3)}
+  100%{background:var(--surface-2)}
+}
+
+.listJump{
+  flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:6px;
+  margin:var(--s3) var(--s4);padding:6px;
+  font-size:11px;color:var(--ink-2);
+  background:transparent;border:1px solid var(--line);border-radius:var(--r2);
+  transition:color var(--t-fast),border-color var(--t-fast),background var(--t-fast);
+}
+.listJump span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.listJump:hover{color:var(--ink);border-color:var(--accent-line);background:var(--accent-dim)}
+.listJump.done{color:var(--ink-3);cursor:default;border-style:dashed}
+.listJump.done:hover{color:var(--ink-3);border-color:var(--line);background:transparent}
+
+.listShow{
+  flex:0 0 18px;align-self:stretch;
+  background:var(--bg);border-right:1px solid var(--line);
+  color:var(--ink-3);display:grid;place-items:center;
+  transition:background var(--t-fast),color var(--t-fast);
+}
+.listShow:hover{background:var(--surface);color:var(--ink)}
+
+/* ── photo ── */
+.cardArea{
+  flex:1;min-width:0;position:relative;
+  overflow:hidden;background:var(--canvas);
+}
+.photoStage{
+  position:absolute;inset:0;overflow:hidden;
+  cursor:zoom-in;
+  --pl:0; --pr:0; --pm:0;
+  /* While a drag is live the numbers are written straight from the pointer and
+     must not be smoothed -- that would put the card behind the cursor. The
+     moment the drag ends `.dragging` comes off and this transition takes over,
+     springing every number back to zero: that IS the snap-home animation. */
+  transition:--pl var(--t-snap), --pr var(--t-snap), --pm var(--t-snap);
+}
+.photoStage.dragging{transition:none}
+
+/* The image space. JS sizes this to bw*s x bh*s and pans it with translate
+   only. Height is always derived from width through the photo's exact aspect
+   ratio -- if the box ratio drifts even in the third decimal, object-fit has
+   to letterbox and the whole image gets resampled. */
+.photoLayer{
+  position:absolute;left:0;top:0;
+  transform-origin:0 0;
+  transition:transform var(--t);
+}
+/* The card itself: this is what the decision animations move, so they never
+   fight with the pan/zoom transform living on .photoLayer above. */
+.photoCard{
+  position:absolute;inset:0;
+  transform-origin:50% 50%;
+  box-shadow:0 0 0 1px var(--line), 0 18px 46px rgba(0,0,0,.45);
+  background:var(--canvas);
+  /* 1:1 under the pointer while dragging (`.dragging` kills this), then a real
+     spring home on release. Without it the card snapped back in a single
+     frame, which is what made the whole gesture feel dead. */
+  transition:transform var(--t-snap), box-shadow var(--t);
+  will-change:transform;
+}
+.photoStage.dragging .photoCard{
+  transition:none;
+  box-shadow:0 0 0 1px var(--line), 0 36px 76px rgba(0,0,0,.62);
+}
+.photoCard img{
+  display:block;width:100%;height:100%;object-fit:contain;
+  transition:opacity var(--t);user-select:none;-webkit-user-drag:none;
+}
+.photoCard img.loading{opacity:.25}
+.photoCard img.hd{position:absolute;inset:0;pointer-events:none;transition:opacity var(--t)}
+.photoStage.zoomed{cursor:grab}
+.photoStage.panning{cursor:grabbing}
+.photoStage:active{cursor:grabbing}
+.photoLayer.nofx{transition:none}
+
+/* ── the stack ──
+   The next photo peeks out below, so a decision reads as "the top card left"
+   and the new one rises into place, instead of the picture simply changing.
+
+   Its geometry arrives from JS as custom properties rather than a finished
+   transform, so the lift below can be an ordinary transform transition: the
+   computed transform changes when the properties do, and transform is
+   interpolatable. */
+
+/* Arrival. The start state is *exactly* the stack-peek geometry set in JS
+   (translateY(+30px) scale(.955)), so the card that was peeking below grows
+   into the slot instead of a new one fading in from nowhere.
+
+   `backwards`, never `both`: a CSS animation outranks inline styles, so a
+   forwards-filling arrival would keep overriding `style.transform` forever and
+   the card would be undraggable. `backwards` covers the first frame (no flash
+   at the resting position) without holding on afterwards. */
+.photoCard.entering{animation:cardRise 460ms var(--spring) backwards}
+@keyframes cardRise{
+  0%   {transform:translateY(30px) scale(.955); opacity:.55}
+  100% {transform:none; opacity:1}
+}
+
+/* departure -- three outcomes, three different physics.
+   keep   : filed away to the right, decelerating
+   reject : dropped away to the left, accelerating (gravity, not a slide)
+   mark   : does NOT leave. It gets sealed, settles back into the stack, and
+            only then is lifted out -- a decision that adds rather than removes.
+
+   This is the KEY path only. A key press has no velocity behind it, so it gets
+   a fixed arc; a drag is thrown by the integrator in app.js instead, in whatever
+   direction the gesture actually had. */
+.photoStage.release-keep   .photoCard{animation:exitKeep 420ms var(--ease-ios) both}
+.photoStage.release-reject .photoCard{animation:exitReject 360ms var(--drop) both}
+.photoStage.release-mark   .photoCard{animation:exitMark 520ms var(--ease-ios) both}
+
+/* --sx/--sr carry the drag position into the departure, so releasing a card
+   that was dragged 140px continues from there instead of snapping back. */
+.photoCard{--sx:0px;--sr:0deg}
+
+/* Travel is deliberately large. A card that only moves 60% of its own width
+   barely clears the stack behind it, so the exit reads as a fade rather than
+   as the card leaving. --fling scales both the distance and the rotation, so a
+   card reads as leaving rather than fading. */
+@keyframes exitKeep{
+  0%   {transform:translate(var(--sx),0) rotate(var(--sr)) scale(1);opacity:1}
+  100% {transform:translate(calc(var(--sx) + 86%),-4%)
+                    rotate(7deg) scale(.82);opacity:0}
+}
+@keyframes exitReject{
+  0%   {transform:translate(var(--sx),0) rotate(var(--sr)) scale(1);opacity:1}
+  100% {transform:translate(calc(var(--sx) - 78% * var(--fling,1)),14%)
+                    rotate(-13deg) scale(.78);opacity:0}
+}
+/* 收藏 does not fall away and is not filed sideways -- the card is *picked up*.
+   It pops once so you feel the selection land, then rises out of the stack
+   while the gold edge stays lit. */
+@keyframes exitMark{
+  0%   {transform:translate(var(--sx),0) rotate(var(--sr)) scale(1)}
+  16%  {transform:translate(var(--sx),-4px) rotate(var(--sr)) scale(1.045)}
+  34%  {transform:translate(var(--sx),0) rotate(var(--sr)) scale(.998)}
+  50%  {transform:translate(var(--sx),-2px) rotate(var(--sr)) scale(1.018)}
+  100% {transform:translate(var(--sx),-14%) rotate(var(--sr)) scale(.86);opacity:0}
+}
+
+/* ── hold preview ──
+   The photo stays the subject. Two restrained signals, both proportional to
+   the gesture:
+
+     1. a crisp coloured ring on the card edge -- this is the one that reads,
+        because it sits on the card's own boundary instead of over the picture
+     2. a soft tint that dies out by ~half way across, so it reads as the card
+        leaning towards a direction rather than the frame being painted
+
+   An earlier version washed the whole frame in red/green at 52% alpha, which
+   shouted over the photograph you are trying to judge. */
+.photoCard::after{
+  content:'';position:absolute;inset:0;pointer-events:none;z-index:4;
+  border:3px solid transparent;
+}
+.photoStage.hold-reject .photoCard::after{border-color:rgba(248,81,73,var(--pl))}
+.photoStage.hold-keep   .photoCard::after{border-color:rgba(63,185,80,var(--pr))}
+.photoStage.hold-mark   .photoCard::after{border-color:rgba(224,167,42,var(--pm))}
+
+.previewVeil{
+  position:absolute;inset:0;pointer-events:none;
+  opacity:0;
+  will-change:opacity,transform;
+}
+.photoStage.hold-reject .previewVeil{
+  opacity:var(--pl);
+  transform:scaleX(calc(.34 + .66 * var(--pl)));
+  transform-origin:0 50%;
+  background:linear-gradient(90deg,
+    rgba(248,81,73,.30), rgba(248,81,73,.09) 22%, transparent 46%);
+}
+.photoStage.hold-keep .previewVeil{
+  opacity:var(--pr);
+  transform:scaleX(calc(.34 + .66 * var(--pr)));
+  transform-origin:100% 50%;
+  background:linear-gradient(270deg,
+    rgba(63,185,80,.30), rgba(63,185,80,.09) 22%, transparent 46%);
+}
+/* mark grows from the centre outward instead of sweeping */
+.photoStage.hold-mark .previewVeil{
+  opacity:var(--pm);
+  transform:scale(calc(.7 + .3 * var(--pm)));
+  transform-origin:50% 46%;
+  background:radial-gradient(circle at 50% 46%,
+    rgba(224,167,42,.20), rgba(224,167,42,.07) 40%, transparent 64%);
+}
+
+/* ── the gesture label ──
+   A drag answer belongs on the edge the card is heading for, not in the middle
+   of the frame. Your eye follows the card, so putting the word where it is
+   going means you read it without looking away -- and a label pinned to the
+   top centre told you what was happening but not which way.
+
+   Position comes from JS (`placeStamp`) in stage pixels taken from the CARD's
+   geometry rather than the stage's: the stage is usually wider than the photo
+   because of the letterbox margins, and anchoring to it put the badge out in
+   the black border beside the picture instead of on it.
+
+   --stamp-shift lets the shared stampOut keyframes know which side they are on
+   (0 for a left-anchored label, -100% for a right-anchored one), and
+   --stamp-dx carries the card's current drag offset so the label rides the
+   edge it is pinned to instead of staying behind at the resting position. */
+.previewStamp{
+  position:absolute;
+  left:var(--stamp-l,50%);top:var(--stamp-cy,50%);
+  transform:translate(0,-50%) scale(.9);
+  transform-origin:0 50%;
+  --stamp-shift:0px;
+  padding:9px 18px;
+  font:700 15px/1 var(--ui);letter-spacing:.16em;text-indent:.16em;
+  color:var(--on-solid);background:rgba(10,11,13,.82);
+  border:1.5px solid currentColor;border-radius:var(--r2);
+  opacity:0;pointer-events:none;
+  will-change:opacity,transform;
+  white-space:nowrap;
+  backdrop-filter:blur(6px);
+}
+/* Driven by the same progress numbers as the veil, so the label slides and
+   fades with the gesture -- no threshold, nothing to flicker. It arrives from
+   just outside the edge, so it reads as being pulled in by the drag. */
+.photoStage.hold-reject .previewStamp{
+  left:calc(var(--stamp-l,50%) + var(--stamp-dx,0px));
+  transform-origin:0 50%;
+  --stamp-shift:0px;
+  opacity:var(--pl);
+  transform:translate(calc(-30px * (1 - var(--pl))),-50%)
+            scale(calc(.9 + .1 * var(--pl)));
+  color:var(--reject-ink);
+}
+.photoStage.hold-keep .previewStamp{
+  left:calc(var(--stamp-r,50%) + var(--stamp-dx,0px));
+  transform-origin:100% 50%;
+  --stamp-shift:-100%;
+  opacity:var(--pr);
+  transform:translate(calc(-100% + 30px * (1 - var(--pr))),-50%)
+            scale(calc(.9 + .1 * var(--pr)));
+  color:var(--keep-ink);
+}
+.photoStage.release-reject .previewStamp{
+  left:calc(var(--stamp-l,50%) + var(--stamp-dx,0px));
+  transform-origin:0 50%;--stamp-shift:0px;
+}
+.photoStage.release-keep .previewStamp{
+  left:calc(var(--stamp-r,50%) + var(--stamp-dx,0px));
+  transform-origin:100% 50%;--stamp-shift:-100%;
+}
+
+/* ── 收藏 ──
+   收藏 is not a verdict stamped onto a picture, it is picking the card up: the
+   card lifts, a gold edge lights up, and a small star settles into the corner.
+   Nothing is written across the photograph itself. */
+.photoStage.hold-mark .previewStamp,
+.photoStage.release-mark .previewStamp,
+.photoStage.release-mark-off .previewStamp{
+  left:var(--stamp-rx,50%);top:var(--stamp-ry,14px);
+  transform-origin:100% 50%;
+  display:inline-flex;align-items:center;gap:7px;
+  padding:7px 15px 7px 12px;
+  border-radius:999px;border:0;
+  font-size:12.5px;letter-spacing:.09em;text-indent:0;
+  color:var(--on-mark);background:var(--mark);
+  box-shadow:0 1px 0 rgba(255,255,255,.35) inset,
+             0 6px 20px rgba(0,0,0,.45), 0 0 0 1px rgba(224,167,42,.5);
+}
+.photoStage.hold-mark .previewStamp::before,
+.photoStage.release-mark .previewStamp::before,
+.photoStage.release-mark-off .previewStamp::before{
+  content:'★';font-size:13px;line-height:1;
+}
+.photoStage.hold-mark .previewStamp{
+  opacity:var(--pm);
+  transform:translate(calc(-100% + 12px * (1 - var(--pm))),0)
+            scale(calc(.82 + .18 * var(--pm)));
+}
+.photoStage.release-mark .previewStamp{animation:starIn 520ms var(--spring) both}
+/* The star lands, gives a small overshoot, and rides out with the card. */
+@keyframes starIn{
+  0%   {opacity:0;transform:translate(-100%,-9px) scale(.5) rotate(26deg)}
+  30%  {opacity:1;transform:translate(-100%,0) scale(1.12) rotate(-6deg)}
+  48%  {opacity:1;transform:translate(-100%,0) scale(.98) rotate(2deg)}
+  64%  {opacity:1;transform:translate(-100%,0) scale(1) rotate(0deg)}
+  100% {opacity:0;transform:translate(-100%,-18px) scale(1) rotate(0deg)}
+}
+/* Taking the mark back: the star simply shrinks away. The card does not move,
+   because nothing about the photo changed -- only the mark on it. */
+.photoStage.release-mark-off .previewStamp{animation:starOut 360ms var(--ease-ios) both}
+@keyframes starOut{
+  0%   {opacity:1;transform:translate(-100%,0) scale(1)}
+  100% {opacity:0;transform:translate(calc(-100% + 12px),-10px) scale(.55)}
+}
+/* the two "removal" outcomes flick their label away as the card leaves.
+   --stamp-shift carries which edge the label hangs off, because the shared
+   keyframes have to know whether "aligned" means 0 or -100%. */
+.photoStage.release-keep .previewStamp,
+.photoStage.release-reject .previewStamp{
+  animation:stampOut 220ms var(--drop) both;
+}
+@keyframes stampOut{
+  0%  {opacity:1;transform:translate(var(--stamp-shift,0px),-50%) scale(1)}
+  100%{opacity:0;transform:translate(var(--stamp-shift,0px),-50%) scale(1.42)}
+}
+
+/* on-photo overlays */
+/* NO mix-blend-mode. The overlay marks pixels at luminance >= 250 --
+   which are, by definition, near-white -- and screen can only ever
+   brighten. screen(#fff, #ffbe28) is #fff, so the stripes were
+   invisible in exactly the place they exist to point at. Measured
+   before changing: see evaluation/zebra_probe.py. */
+.zebra{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+
+.metaLine{
+  position:absolute;left:10px;bottom:10px;right:210px;
+  font:400 10.5px var(--mono);color:var(--ink-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  background:rgba(8,9,11,.8);padding:4px 8px;border-radius:var(--r2);
+  font-variant-numeric:tabular-nums;
+}
+.groupBadge{
+  position:absolute;left:10px;bottom:32px;
+  font:500 10.5px var(--mono);color:var(--accent-ink);
+  background:rgba(8,9,11,.82);border:1px solid var(--accent-line);
+  padding:4px 8px;border-radius:var(--r2);
+  font-variant-numeric:tabular-nums;
+}
+.zoomBadge{
+  position:absolute;left:50%;top:10px;transform:translateX(-50%);
+  font:500 11px var(--mono);color:var(--ink);
+  background:rgba(8,9,11,.86);border:1px solid var(--line-strong);
+  padding:5px 11px;border-radius:var(--r2);
+  font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+
+/* the software's suggestion */
+.verdictBadge{
+  position:absolute;right:10px;top:10px;
+  display:flex;align-items:center;gap:var(--s3);
+  padding:8px 14px;max-width:58%;
+  background:rgba(8,9,11,.9);
+  border:1px solid var(--line-strong);border-left-width:3px;
+  border-radius:var(--r2);
+}
+.verdictBadge .vdot{width:7px;height:7px;background:var(--idle);flex:0 0 auto}
+.verdictBadge .vmain{font-size:14px;font-weight:650;letter-spacing:.01em}
+.verdictBadge .vwhy{
+  font:400 11px var(--mono);color:var(--ink-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.verdictBadge.keep{border-left-color:var(--keep)}
+.verdictBadge.keep .vdot{background:var(--keep)}
+.verdictBadge.keep .vmain{color:var(--keep-ink)}
+.verdictBadge.reject{border-left-color:var(--reject)}
+.verdictBadge.reject .vdot{background:var(--reject)}
+.verdictBadge.reject .vmain{color:var(--reject-ink)}
+/* the software's own suggestion -- "复查" is deliberately neutral, because
+   "I have no strong opinion" should not look like a verdict */
+.verdictBadge.maybe{border-left-color:var(--line-strong)}
+.verdictBadge.maybe .vdot{background:var(--ink-3)}
+.verdictBadge.maybe .vmain{color:var(--ink-2)}
+
+/* your own decision — dashed, so it never reads as the software talking */
+.decisionBadge{
+  position:absolute;right:10px;top:56px;
+  display:flex;align-items:center;gap:6px;
+  font-size:12px;line-height:17px;font-weight:550;
+  padding:5px 12px;
+  background:rgba(8,9,11,.86);
+  border:1px dashed var(--line-strong);border-radius:var(--r2);
+}
+.decisionBadge.keep{color:var(--keep-ink);border-color:rgba(63,185,80,.55)}
+.decisionBadge.reject{color:var(--reject-ink);border-color:rgba(248,81,73,.55)}
+.decisionBadge.mark{color:var(--mark-ink);border-color:rgba(224,167,42,.6)}
+
+/* ── the issues ──
+   These ARE the product: "右眼闭合 91%" is the whole reason to use this over a
+   tool that hands you a score. They used to be 10.5px chips in the top-left
+   corner, competing with the verdict badge, which is exactly where the eye does
+   not go and where they were easy to miss entirely.
+
+   They now sit centred along the bottom edge -- the horizontal centre of the
+   frame, above the shooting data, on the part of a photograph that usually
+   carries the least (ground, clothing, foreground). Deliberately NOT in the
+   middle: anything over the subject is the thing you are trying to look at. */
+.issueTags{
+  position:absolute;left:50%;transform:translateX(-50%);
+  bottom:38px;max-width:min(72%,700px);
+  display:flex;flex-wrap:wrap;justify-content:center;gap:6px;
+  pointer-events:none;
+}
+.tag{
+  display:inline-flex;align-items:center;gap:6px;
+  font:500 12px/1 var(--ui);letter-spacing:.01em;
+  padding:6px 11px;border-radius:var(--r2);
+  color:var(--ink);background:rgba(8,9,11,.88);
+  border:1px solid var(--line-strong);
+  backdrop-filter:blur(6px);
+  box-shadow:0 4px 14px rgba(0,0,0,.35);
+}
+.tag .fx{color:var(--ink-3);font:500 10.5px var(--mono)}
+.tag .conf{
+  color:var(--ink-3);font:500 10.5px var(--mono);
+  font-variant-numeric:tabular-nums;
+}
+/* Severity is carried by the border and the dot, and the label still says what
+   is wrong -- colour is never the only signal. */
+.tag::before{
+  content:'';width:5px;height:5px;border-radius:50%;
+  background:var(--ink-3);flex:0 0 auto;
+}
+.tag.fatal{color:var(--reject-ink);border-color:rgba(248,81,73,.55)}
+.tag.fatal::before{background:var(--reject)}
+.tag.high{color:var(--sev-high);border-color:rgba(255,190,133,.45)}
+.tag.high::before{background:var(--sev-high)}
+.tag.medium{color:var(--warn-ink);border-color:rgba(210,153,34,.45)}
+.tag.medium::before{background:var(--warn)}
+.tag.low,.tag.info{color:var(--ink-2)}
+.tag.low::before,.tag.info::before{background:var(--ink-3)}
+
+/* The histogram moved to the top-left corner, which the issue tags vacated. It
+   is a reference you glance at, so it can live at the edge; the issues cannot. */
+.histo{
+  position:absolute;left:10px;top:10px;
+  background:rgba(8,9,11,.84);border:1px solid var(--line);
+  border-radius:var(--r2);padding:3px;
+}
+.histo canvas{display:block}
+
+.emptyState{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:var(--s3);text-align:center;
+  padding:var(--s7);
+}
+.emptyState .big{font-size:15px;font-weight:600;color:var(--ink-2)}
+.emptyState .small{font-size:12px;color:var(--ink-3);max-width:32em;line-height:1.7}
+
+/* ═══════════════════════════ bottom action bar ═══════════════════════════
+   Doubles as the key reminder and as real buttons, so the whole flow is
+   reachable with a mouse alone -- like the toolbar under a photo viewer. */
+
+.actionBar{
+  flex:0 0 auto;height:var(--actionbar-h);
+  display:flex;align-items:center;gap:var(--s5);
+  padding:0 var(--s5);
+  background:var(--bg);border-top:1px solid var(--line);
+}
+.stats{
+  display:flex;align-items:center;gap:var(--s4);flex:0 0 auto;
+  font:400 11px var(--mono);color:var(--ink-3);
+  font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;
+  max-width:32%;
+}
+.stats b{font-weight:600;color:var(--ink-2)}
+
+.acts{display:flex;align-items:center;gap:var(--s3);margin:0 auto}
+.navs{display:flex;align-items:center;gap:var(--s2);flex:0 0 auto}
+
+.act{
+  display:flex;align-items:center;gap:9px;
+  height:42px;padding:0 var(--s5) 0 var(--s4);
+  color:var(--ink);background:transparent;
+  border:1px solid var(--line);border-radius:var(--r2);
+  transition:background var(--t-fast),border-color var(--t-fast),
+             color var(--t-fast),transform 90ms var(--spring);
+}
+.act .ak{
+  font:600 13px/1 var(--mono);color:var(--ink-3);
+  min-width:26px;text-align:center;
+  font-variant-numeric:tabular-nums;
+}
+.act .al{font-size:13px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.act:active{transform:translateY(1px)}
+
+.act.reject .ak,.act.reject .al{color:var(--reject-ink)}
+.act.reject:hover{background:var(--reject-dim);border-color:rgba(248,81,73,.5)}
+.act.reject.active{background:var(--reject-dim);border-color:var(--reject)}
+
+.act.keep .ak,.act.keep .al{color:var(--keep-ink)}
+.act.keep:hover{background:var(--keep-dim);border-color:rgba(63,185,80,.5)}
+.act.keep.active{background:var(--keep-dim);border-color:var(--keep)}
+
+.act.mark .ak,.act.mark .al{color:var(--mark-ink)}
+.act.mark:hover{background:var(--mark-dim);border-color:rgba(224,167,42,.55)}
+.act.mark.active{background:var(--mark-dim);border-color:var(--mark)}
+
+/* `.on` = this is what the current photo already is. It has to be clearly
+   different from `.active`, which only means "you are holding this key". */
+.act.on{background:var(--surface-2)}
+.act.reject.on{background:var(--reject-dim);border-color:var(--reject)}
+.act.keep.on{background:var(--keep-dim);border-color:var(--keep)}
+.act.mark.on{background:var(--mark);border-color:var(--mark)}
+.act.mark.on .al,.act.mark.on .ak{color:var(--on-mark)}
+/* A small mark so the state survives a colour-blind reading too. */
+.act.on::after{
+  content:'';width:5px;height:5px;border-radius:50%;
+  background:currentColor;opacity:.75;margin-left:-2px;
+}
+.act.mark.on::after{background:var(--on-mark);opacity:.8}
+
+.act2{
+  display:inline-flex;align-items:center;gap:6px;
+  height:30px;padding:0 10px;
+  font-size:11.5px;color:var(--ink-3);
+  background:transparent;border:1px solid transparent;border-radius:var(--r2);
+  transition:color var(--t-fast),background var(--t-fast),border-color var(--t-fast);
+  white-space:nowrap;
+}
+.act2 .ak{font:500 12px/1 var(--mono);color:var(--ink-3)}
+.act2:hover{color:var(--ink);background:var(--surface-2);border-color:var(--line)}
+.act2:hover .ak{color:var(--ink-2)}
+.act2.quiet{border-color:var(--line)}
+
+@media (max-width:1180px){
+  .stats{display:none}
+}
+@media (max-width:900px){
+  .act{padding:0 var(--s4) 0 var(--s3)}
+  .act .ak{min-width:0}
+  .act2{font-size:0;gap:0;padding:0 8px}
+  .act2 .ak{font-size:12px}
+}
+
+/* ═══════════════════════════════ grid ═══════════════════════════════ */
+
+#gridView{background:var(--bg)}
+.grid{
+  flex:1;overflow-y:auto;padding:var(--s4);
+  display:grid;gap:var(--s3);
+  grid-template-columns:repeat(auto-fill,minmax(168px,1fr));
+  align-content:start;
+}
+/* Square cells via a padding-top spacer, NOT aspect-ratio on the item.
+   aspect-ratio on a grid item does not contribute to grid-auto-rows in
+   Chromium: the row resolved to 81px while the cell was 181px tall, so every
+   row overlapped the next by 100px and you only saw the top 45% of a photo. */
+.cell{
+  position:relative;overflow:hidden;cursor:pointer;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r2);
+  transition:border-color var(--t-fast);
+}
+.cell::before{content:"";display:block;padding-top:100%}
+.cell:hover{border-color:var(--line-strong)}
+.cell img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.cell.keep{border-color:var(--keep)}
+.cell.reject{border-color:var(--reject)}
+.cell.mark{border-color:var(--mark)}
+.cell.sel{outline:2px solid var(--accent-ink);outline-offset:-2px}
+.cell .flags{
+  position:absolute;left:0;right:0;top:0;padding:6px;
+  display:flex;flex-wrap:wrap;gap:3px;
+}
+.cell .flag{
+  font:500 9.5px var(--mono);padding:2px 5px;border-radius:var(--r2);
+  background:rgba(8,9,11,.86);color:var(--ink-2);border:1px solid var(--line);
+}
+.cell .flag.fatal{color:var(--reject-ink);border-color:rgba(248,81,73,.5)}
+.cell .flag.high{color:var(--sev-high);border-color:rgba(255,190,133,.4)}
+.cell .gmark{
+  position:absolute;right:6px;top:6px;
+  font:500 9.5px var(--mono);padding:2px 5px;border-radius:var(--r2);
+  background:rgba(8,9,11,.86);color:var(--accent-ink);
+  border:1px solid var(--accent-line);
+}
+.cell .cap{
+  position:absolute;left:0;right:0;bottom:0;
+  padding:14px 7px 6px;
+  font:400 10px var(--mono);color:var(--ink-2);
+  background:rgba(8,9,11,.9);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+/* ═══════════════════════════════ modals ═══════════════════════════════ */
+
+.modal{
+  position:fixed;inset:0;z-index:60;
+  display:flex;align-items:center;justify-content:center;padding:var(--s6);
+  background:rgba(0,0,0,.74);
+}
+.sheet,.browserSheet,.coachSheet{
+  background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r2);
+  box-shadow:var(--shadow);
+  max-height:86vh;overflow-y:auto;
+}
+.sheet{width:min(560px,100%);padding:var(--s6)}
+.sheet h2,.coachSheet h2{
+  margin:0 0 var(--s5);font-size:16px;font-weight:650;letter-spacing:-.01em;
+}
+.sheet h3{margin:var(--s5) 0 var(--s2);font-size:12.5px;font-weight:600;color:var(--ink-2)}
+.sheet p{margin:0 0 var(--s3);font-size:12.5px;color:var(--ink-2);line-height:1.65}
+.sheet code{display:inline-block;word-break:break-all}
+.rowBtns{
+  display:flex;justify-content:flex-end;gap:var(--s3);
+  margin-top:var(--s6);padding-top:var(--s5);border-top:1px solid var(--line);
+}
+/* In a scrolling sheet the action row must never scroll out of reach --
+   the help table is tall enough that it did exactly that. */
+.sheet .rowBtns{
+  position:sticky;bottom:0;z-index:2;
+  background:var(--surface);
+  margin-top:var(--s5);padding-top:var(--s5);
+}
+.applyGrid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(66px,1fr));
+  gap:var(--s2);margin:var(--s3) 0;max-height:220px;overflow-y:auto;
+}
+.applyGrid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:var(--r2);
+  border:1px solid var(--line)}
+
+/* keys table */
+.keys{width:100%;border-collapse:collapse;font-size:12px}
+.keys td{padding:5px 0;vertical-align:top;border-bottom:1px solid var(--line-faint)}
+.keys td:first-child{width:140px;color:var(--ink-2);white-space:nowrap}
+.keys td:last-child{color:var(--ink-2)}
+.keys td b{color:var(--ink);font-weight:600}
+.keys tr.sep td{
+  padding-top:var(--s4);padding-bottom:var(--s1);
+  font:600 10px/1 var(--ui);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3);border-bottom-color:var(--line);
+}
+
+/* ── folder browser ── */
+.browserSheet{width:min(720px,100%);display:flex;flex-direction:column;
+  max-height:82vh;padding:0}
+.browserHead{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:var(--s5) var(--s5) var(--s4);border-bottom:1px solid var(--line);
+}
+.browserHead h2{margin:0;font-size:15px;font-weight:650}
+.roots{
+  display:flex;flex-wrap:wrap;gap:var(--s2);
+  padding:var(--s4) var(--s5);border-bottom:1px solid var(--line);
+}
+.rootChip{
+  display:inline-flex;align-items:center;gap:6px;
+  height:28px;padding:0 11px;
+  font-size:12px;color:var(--ink-2);
+  background:transparent;border:1px solid var(--line);border-radius:var(--r2);
+  transition:color var(--t-fast),border-color var(--t-fast),background var(--t-fast);
+}
+.rootChip:hover{color:var(--ink);background:var(--surface-2);border-color:var(--line-strong)}
+.rootChip.on{color:var(--accent-ink);border-color:var(--accent-line);background:var(--accent-dim)}
+.crumbs{
+  display:flex;align-items:center;gap:var(--s2);flex-wrap:wrap;
+  padding:var(--s3) var(--s5);
+  font:400 11.5px var(--mono);color:var(--ink-3);
+  border-bottom:1px solid var(--line);
+}
+.crumbSep{color:var(--ink-3);opacity:.5}
+.crumbs .linkbtn{font:400 11.5px var(--mono)}
+.dirList{flex:1;overflow-y:auto;min-height:180px;max-height:44vh;padding:var(--s2) 0}
+.dirRow{
+  display:flex;align-items:center;gap:var(--s3);
+  width:100%;padding:7px var(--s5);text-align:left;
+  transition:background var(--t-fast);
+}
+.dirRow:hover{background:var(--surface-2)}
+.dirRow .ico{width:18px;display:grid;place-items:center;color:var(--ink-3);flex:0 0 auto}
+.dirRow:hover .ico{color:var(--accent-ink)}
+.dirRow .nm{flex:1;min-width:0;font-size:12.5px;color:var(--ink-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dirRow.has .nm{color:var(--ink);font-weight:550}
+.dirRow .cnt{font:400 10.5px var(--mono);color:var(--ink-3);flex:0 0 auto;
+  font-variant-numeric:tabular-nums}
+.dirRow .up{color:var(--ink-3)}
+.dirRow.fold .nm{color:var(--ink-3)}
+.dirEmpty{padding:var(--s6) var(--s5);font-size:12px;color:var(--ink-3);text-align:center}
+.browserFoot{
+  border-top:1px solid var(--line);padding:var(--s4) var(--s5);
+  display:flex;flex-direction:column;gap:var(--s3);
+}
+.pickedPath{font:400 11.5px var(--mono);color:var(--ink-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;text-align:left}
+.browserBtns{display:flex;align-items:center;gap:var(--s3)}
+.roToggle{display:flex;align-items:center;gap:var(--s2);font-size:12px;
+  color:var(--ink-2);cursor:pointer;margin-right:auto}
+.roToggle input{width:14px;height:14px;accent-color:var(--accent);cursor:pointer}
+
+/* ── coach ── */
+.coachSheet{width:min(520px,100%);padding:var(--s6)}
+.coachRow{
+  display:flex;align-items:center;gap:var(--s4);
+  padding:var(--s3) 0;border-bottom:1px solid var(--line-faint);
+}
+.coachKey{
+  width:46px;height:40px;flex:0 0 auto;display:grid;place-items:center;
+  background:var(--surface-2);border:1px solid var(--line-strong);border-radius:var(--r2);
+}
+.coachKey kbd{
+  background:none;border:0;font-size:17px;min-width:0;padding:0;color:var(--ink);
+}
+.coachText{display:flex;flex-direction:column;gap:1px}
+.coachText b{font-size:13px;font-weight:600;color:var(--ink)}
+.coachText span{font-size:11.5px;color:var(--ink-3)}
+.coachNote{
+  margin:var(--s5) 0 0;padding:var(--s4);
+  font-size:12px;line-height:1.7;color:var(--ink-2);
+  background:var(--surface-2);border-left:2px solid var(--accent);
+}
+.coachNote b{color:var(--ink)}
+
+/* ═══════════════════════════════ toast / drop ═══════════════════════════════ */
+
+.toast{
+  position:fixed;left:50%;bottom:calc(var(--actionbar-h) + 18px);
+  transform:translateX(-50%);z-index:80;
+  padding:9px var(--s5);
+  font:500 12px var(--ui);color:var(--ink);
+  background:var(--surface-3);border:1px solid var(--line-strong);border-radius:var(--r2);
+  box-shadow:var(--shadow);
+  animation:toastIn var(--t) both;
+}
+.toast.err{color:var(--reject-ink);border-color:rgba(248,81,73,.5)}
+.toast.warn{color:var(--warn-ink);border-color:rgba(210,153,34,.5)}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,8px)}
+  to{opacity:1;transform:translate(-50%,0)}}
+
+.dropVeil{
+  position:fixed;inset:0;z-index:90;display:grid;place-items:center;
+  background:rgba(0,0,0,.82);
+  font-size:15px;font-weight:600;color:var(--accent-ink);
+}
+.dropVeil > div{
+  padding:var(--s6) var(--s7);
+  border:1px dashed var(--accent-line);border-radius:var(--r2);
+  background:var(--accent-dim);
+}
+
+/* ═══════════════════════════════ responsive ═══════════════════════════════ */
+
+@media (max-width:1180px){
+  :root{--list-w:224px}
+}
+@media (max-width:1000px){
+  /* The home screen stacks its own two columns via .homeBody's own query. */
+}
+@media (max-width:980px){
+  :root{--list-w:184px;--list-w:184px}
+  .listItem .fl{display:none}
+  .pathChip{max-width:22vw}
+  .hints > span:nth-child(n+4){display:none}
+}
+@media (max-width:820px){
+  :root{--list-w:150px;--list-w:150px}
+  .listItem .nm{font-size:11px}
+  .listItem .fl{display:none}
+  .decide .dhint{display:none}
+  .stats span:nth-child(n+4){display:none}
+}
+@media (max-width:640px){
+  /* Narrow rather than hide. Forcing display:none here also hid the re-open
+     button (it carries .hidden, and !important wins), so the list became
+     unreachable. Visibility is JS's job; this only changes the proportions. */
+  :root{--list-w:124px;--list-w:124px}
+  .listItem .info{display:none}
+  .listJump span{display:none}
+  .hints{display:none}
+}
+
+/* ═══════════════════════════════ motion preference ═══════════════════════════════ */
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+    scroll-behavior:auto !important;
+  }
+}
+
+/* ═══════════════════════════════ settings ═══════════════════════════════ */
+.setSheet{
+  width:min(620px,92vw);max-height:82vh;
+  display:flex;flex-direction:column;padding:0;
+}
+.setHead{
+  display:flex;align-items:center;gap:var(--s4);
+  padding:14px var(--s5);border-bottom:1px solid var(--line);
+}
+.setHead h2{margin:0;font-size:14px;font-weight:660;flex:1}
+.setBody{overflow-y:auto;padding:var(--s3) var(--s5) var(--s4);min-height:0}
+.setGroup{margin-bottom:var(--s4)}
+.setGroup:last-child{margin-bottom:0}
+.setGroupTitle{
+  padding:var(--s4) 0 var(--s2);
+  font:600 10px/1 var(--ui);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3);border-bottom:1px solid var(--line);margin-bottom:var(--s2);
+}
+.setRow{
+  display:flex;align-items:center;gap:var(--s5);
+  padding:9px 0;border-bottom:1px solid var(--line-faint);
+}
+.setRow:last-child{border-bottom:0}
+.setLabel{flex:1;min-width:0;font-size:12.5px;color:var(--ink);display:flex;flex-direction:column;gap:2px}
+.setHint{font-size:11px;line-height:1.6;color:var(--ink-3)}
+.setCtl{flex:0 0 auto;display:flex;align-items:center;gap:6px}
+
+/* A switch, not a checkbox -- it reads as "on/off" at a glance and does not
+   need the 13px label alignment a checkbox would. */
+.switch{
+  width:38px;height:22px;border-radius:11px;padding:2px;
+  background:var(--surface-3);border:1px solid var(--line-strong);
+  display:flex;align-items:center;transition:background var(--t-fast),border-color var(--t-fast);
+}
+.switch i{
+  display:block;width:16px;height:16px;border-radius:50%;background:var(--ink-3);
+  transition:transform var(--t-fast) var(--ease-ios),background var(--t-fast);
+}
+.switch.on{background:var(--accent);border-color:var(--accent)}
+.switch.on i{transform:translateX(16px);background:var(--on-solid)}
+
+/* Three-way, because 0.40 is not something anyone can reason about. */
+.seg{display:flex;border:1px solid var(--line-strong);border-radius:var(--r2);overflow:hidden}
+.seg button{
+  padding:5px 11px;font-size:11.5px;font-weight:550;color:var(--ink-3);
+  background:var(--surface-2);border-right:1px solid var(--line-strong);
+  transition:color var(--t-fast),background var(--t-fast);
+}
+.seg button:last-child{border-right:0}
+.seg button:hover{color:var(--ink);background:var(--surface-3)}
+.seg button.on{color:var(--on-solid);background:var(--accent)}
+
+.setText,.setNum{
+  font:inherit;font-size:12px;color:var(--ink);background:var(--surface-2);
+  border:1px solid var(--line-strong);border-radius:var(--r2);
+  padding:5px 8px;outline:none;
+}
+.setText{width:170px}
+.setNum{width:74px;font-family:var(--mono);text-align:right}
+.setText:focus,.setNum:focus{border-color:var(--accent)}
+.setUnit{font-size:11px;color:var(--ink-3);min-width:2.4em}
+.setFoot{
+  display:flex;align-items:center;gap:var(--s4);
+  padding:11px var(--s5);border-top:1px solid var(--line);
+}
+.setFoot .sp{flex:1}
+
+/* ── apply dialog: one row per destination ── */
+.applyRow{
+  display:flex;align-items:center;gap:10px;
+  padding:6px 0;font-size:12.5px;color:var(--ink-2);
+}
+.applyRow code{
+  flex:1;min-width:0;font:400 11px var(--mono);color:var(--ink-3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.applyTag{
+  flex:0 0 auto;min-width:44px;text-align:center;
+  padding:2px 8px;border-radius:var(--r2);font-size:11px;font-weight:600;
+}
+.applyTag.d-reject{color:var(--on-solid);background:var(--reject)}
+.applyTag.d-keep  {color:var(--on-solid);background:var(--keep)}
+.applyTag.d-mark  {color:var(--on-mark);background:var(--mark)}
+/* the thumbnail grid carries the same colours, so a glance sorts them */
+.applyGrid img.d-reject{outline:2px solid var(--reject);outline-offset:-2px}
+.applyGrid img.d-keep  {outline:2px solid var(--keep);outline-offset:-2px}
+.applyGrid img.d-mark  {outline:2px solid var(--mark);outline-offset:-2px}
+
+/* ── undo row in the apply dialog ── */
+.undoBar{
+  display:flex;align-items:center;gap:12px;
+  margin:10px 0 2px;padding:9px 11px;
+  background:var(--surface-2);border:1px solid var(--line);
+  border-left:3px solid var(--warn);border-radius:var(--r2);
+  font-size:12px;color:var(--ink-2);
+}
+.undoBar span{flex:1;min-width:0}
+.undoBar b{color:var(--ink)}
+
+/* ── similar groups in the photo list ──
+   Only groups of two or more get a colour: a group of one is not similar to
+   anything, and this library has 66 groups for 92 photos, so colouring the
+   singletons too would paint nearly the whole list and mean nothing.
+   The hue comes from group_id, so a group keeps its colour between renders. */
+.listItem .fl .dot{opacity:.45;margin:0 3px}
+.listItem .grp{
+  display:inline-block;padding:0 5px;border-radius:3px;
+  font-size:10px;line-height:15px;
+  background:var(--surface-3);color:var(--ink-2);
+}
+.listItem.g0 .grp{background:var(--g0);color:var(--on-solid)}
+.listItem.g1 .grp{background:var(--g1);color:var(--on-solid)}
+.listItem.g2 .grp{background:var(--g2);color:var(--on-solid)}
+.listItem.g3 .grp{background:var(--g3);color:var(--on-solid)}
+.listItem.g4 .grp{background:var(--g4);color:var(--on-solid)}
+.listItem.g5 .grp{background:var(--g5);color:var(--on-solid)}
+.listItem.g6 .grp{background:var(--g6);color:var(--on-solid)}
+.listItem.g7 .grp{background:var(--g7);color:var(--on-solid)}
+.listItem.g15 .grp{background:var(--g15);color:var(--on-solid)}
+.listItem.g14 .grp{background:var(--g14);color:var(--on-solid)}
+.listItem.g13 .grp{background:var(--g13);color:var(--on-solid)}
+.listItem.g12 .grp{background:var(--g12);color:var(--on-solid)}
+.listItem.g11 .grp{background:var(--g11);color:var(--on-solid)}
+.listItem.g10 .grp{background:var(--g10);color:var(--on-solid)}
+.listItem.g9 .grp{background:var(--g9);color:var(--on-solid)}
+.listItem.g8 .grp{background:var(--g8);color:var(--on-solid)}
+
+/* ── the photo list: two lines per row, group headers between blocks ──
+   Base shape is name + issues on their own lines, never truncated. Photos in a
+   similar group get a header above the block, which carries the group's colour
+   and a tally of what has been decided in it -- the question a burst actually
+   asks is "which one of these", not "what is this one". */
+
+/* the issue line wraps instead of being cut off */
+.listItem .fl{white-space:normal;line-height:1.45;margin-top:2px}
+
+/* room for the second line */
+.listItem{padding-top:7px;padding-bottom:7px}
+.listItem .info{display:flex;flex-direction:column}
+
+.grpHead{
+  display:flex;align-items:center;gap:8px;
+  padding:5px 10px;
+  background:var(--surface-2);
+  border-left:3px solid var(--line-2);
+  border-bottom:1px solid var(--line);
+}
+.grpHead .grp{
+  display:inline-block;padding:1px 6px;border-radius:3px;
+  font-size:10px;line-height:15px;font-weight:600;
+  color:var(--on-solid);background:var(--surface-3);
+}
+.grpTally{font-size:10.5px;color:var(--ink-3);white-space:nowrap;
+          overflow:hidden;text-overflow:ellipsis}
+.grpHead.g0{border-left-color:var(--g0)}
+.grpHead.g0 .grp{background:var(--g0)}
+.grpHead.g1{border-left-color:var(--g1)}
+.grpHead.g1 .grp{background:var(--g1)}
+.grpHead.g2{border-left-color:var(--g2)}
+.grpHead.g2 .grp{background:var(--g2)}
+.grpHead.g3{border-left-color:var(--g3)}
+.grpHead.g3 .grp{background:var(--g3)}
+.grpHead.g4{border-left-color:var(--g4)}
+.grpHead.g4 .grp{background:var(--g4)}
+.grpHead.g5{border-left-color:var(--g5)}
+.grpHead.g5 .grp{background:var(--g5)}
+.grpHead.g6{border-left-color:var(--g6)}
+.grpHead.g6 .grp{background:var(--g6)}
+.grpHead.g7{border-left-color:var(--g7)}
+.grpHead.g7 .grp{background:var(--g7)}
+.grpHead.g8{border-left-color:var(--g8)}
+.grpHead.g8 .grp{background:var(--g8)}
+.grpHead.g9{border-left-color:var(--g9)}
+.grpHead.g9 .grp{background:var(--g9)}
+.grpHead.g10{border-left-color:var(--g10)}
+.grpHead.g10 .grp{background:var(--g10)}
+.grpHead.g11{border-left-color:var(--g11)}
+.grpHead.g11 .grp{background:var(--g11)}
+.grpHead.g12{border-left-color:var(--g12)}
+.grpHead.g12 .grp{background:var(--g12)}
+.grpHead.g13{border-left-color:var(--g13)}
+.grpHead.g13 .grp{background:var(--g13)}
+.grpHead.g14{border-left-color:var(--g14)}
+.grpHead.g14 .grp{background:var(--g14)}
+.grpHead.g15{border-left-color:var(--g15)}
+.grpHead.g15 .grp{background:var(--g15)}
+
+/* The closing edge of a similar-group block. The header gives the block a top;
+   without a bottom the next block's header reads as just another row and the
+   groups stop being units. Drawn as a 2px inset line in the group's own colour
+   so it matches the header, and 6px of extra room underneath so adjacent blocks
+   do not touch. */
+.listItem.grpEnd{
+  border-bottom:2px solid var(--line-2);
+  margin-bottom:6px;
+}
+.listItem.grpEnd.ge0{border-bottom-color:var(--g0)}
+.listItem.grpEnd.ge1{border-bottom-color:var(--g1)}
+.listItem.grpEnd.ge2{border-bottom-color:var(--g2)}
+.listItem.grpEnd.ge3{border-bottom-color:var(--g3)}
+.listItem.grpEnd.ge4{border-bottom-color:var(--g4)}
+.listItem.grpEnd.ge5{border-bottom-color:var(--g5)}
+.listItem.grpEnd.ge6{border-bottom-color:var(--g6)}
+.listItem.grpEnd.ge7{border-bottom-color:var(--g7)}
+.listItem.grpEnd.ge8{border-bottom-color:var(--g8)}
+.listItem.grpEnd.ge9{border-bottom-color:var(--g9)}
+.listItem.grpEnd.ge10{border-bottom-color:var(--g10)}
+.listItem.grpEnd.ge11{border-bottom-color:var(--g11)}
+.listItem.grpEnd.ge12{border-bottom-color:var(--g12)}
+.listItem.grpEnd.ge13{border-bottom-color:var(--g13)}
+.listItem.grpEnd.ge14{border-bottom-color:var(--g14)}
+.listItem.grpEnd.ge15{border-bottom-color:var(--g15)}
+
+/* ── the guided tour ──
+   The spotlight is a transparent box with a huge spread shadow: the hole is
+   genuinely see-through (so what it points at is at full brightness) and the
+   area around it is dimmed. No separate mask element, and it tracks the target
+   exactly. */
+.tour{position:fixed;inset:0;z-index:9000}
+.tour.hidden{display:none}
+.tour.dim{background:rgba(6,7,9,.74)}
+.tourSpot{
+  position:fixed;display:none;pointer-events:none;z-index:10;
+  border-radius:8px;border:2px solid var(--accent-line);
+  box-shadow:0 0 0 9999px rgba(6,7,9,.74);
+  transition:left var(--t-fast),top var(--t-fast),
+             width var(--t-fast),height var(--t-fast);
+}
+.tourCard{
+  position:fixed;z-index:20;width:352px;
+  background:var(--surface-2);border:1px solid var(--line-strong);
+  border-radius:12px;padding:14px 16px 13px;
+  box-shadow:var(--shadow);
+}
+.tourTop{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+#tourStepNo{font:600 10px var(--mono);color:var(--ink-3);letter-spacing:.08em}
+.tourCard h3{margin:0 0 6px;font-size:14px;font-weight:660;color:var(--ink)}
+.tourCard p{margin:0;font-size:12.5px;line-height:1.75;color:var(--ink-2)}
+.tourCard p b{color:var(--ink);font-weight:600}
+.tourBtns{display:flex;gap:8px;justify-content:flex-end;margin-top:13px}
+
+/* ── the tour's replica of the project screen ──
+   Rendered inside the overlay, from the real class names where they exist, so
+   it looks like the app without being it. Nothing in here is focusable or
+   clickable: the tour is a picture you can point at, not a sandbox. */
+.tourStage{
+  position:fixed;inset:0;z-index:0;
+  pointer-events:none;                 /* the whole replica is inert */
+  background:var(--bg);
+  font:13px/1.5 var(--ui);color:var(--ink);
+}
+
+/* home screen replica */
+.tourHome{display:grid;grid-template-columns:300px minmax(0,1fr);height:100%}
+.tourRail{padding:22px 20px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:18px}
+.tourBrand{font-size:17px;font-weight:700;color:var(--ink)}
+.tourRailBtns{display:flex;flex-direction:column;gap:8px}
+.tourIco{opacity:.7;margin-right:6px}
+.tourRailFoot{margin-top:auto;font-size:11px;color:var(--ink-3)}
+.tourHomeMain{padding:22px 26px}
+.tourHomeHead{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:14px}
+.tourHomeHead b{color:var(--ink-2)}
+.tourProjGrid{display:grid;grid-template-columns:repeat(auto-fill,248px);gap:14px}
+.tourProj{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface-2)}
+.tourProjCover{height:110px;background:linear-gradient(150deg,var(--mock-cover-a),var(--mock-cover-b))}
+.tourProjCover.alt{background:linear-gradient(150deg,var(--mock-cover-c),var(--mock-cover-d))}
+.tourProjMeta{padding:9px 11px}
+.tourProjMeta b{display:block;font-size:12.5px;color:var(--ink)}
+.tourProjMeta span{font-size:11px;color:var(--ink-3)}
+
+/* project screen replica */
+.tourApp{display:flex;flex-direction:column;height:100%}
+.tourTop{display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid var(--line)}
+.tourTopName{font-size:12.5px;color:var(--ink-2)}
+.tourTopSpacer{flex:1}
+.tourChips{display:flex;gap:7px;padding:9px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tourChips .chip{padding:3px 10px;border-radius:999px;font-size:11.5px;
+  border:1px solid var(--line);color:var(--ink-3);background:var(--surface-2)}
+.tourChips .chip.on{color:var(--on-accent);background:var(--accent);border-color:var(--accent)}
+.tourBody{flex:1;display:grid;grid-template-columns:268px minmax(0,1fr);min-height:0}
+.tourList{border-right:1px solid var(--line);padding:6px;overflow:hidden}
+.tourListItem{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:6px;
+  border-left:3px solid transparent;font-size:12px;color:var(--ink-2)}
+.tourListItem.keep{border-left-color:var(--keep)}
+.tourListItem.reject{border-left-color:var(--reject)}
+.tourListItem.mark{border-left-color:var(--mark)}
+.tourListItem i{margin-left:auto;font-style:normal;font-size:12px}
+.tourListItem.keep i{color:var(--keep-ink)}
+.tourListItem.reject i{color:var(--reject-ink)}
+.tourListItem.mark i{color:var(--mark-ink)}
+.tourNum{width:16px;text-align:right;font:600 9.5px var(--mono);color:var(--ink-3)}
+.tourThumb{width:46px;height:34px;border-radius:4px;flex:0 0 auto;
+  background:linear-gradient(150deg,var(--mock-thumb-a),var(--mock-thumb-b))}
+.tourThumb.a{background:linear-gradient(150deg,var(--mock-thumb-c),var(--mock-thumb-d))}
+.tourThumb.b{background:linear-gradient(150deg,var(--mock-thumb-e),var(--mock-thumb-f))}
+.tourThumb.c{background:linear-gradient(150deg,var(--mock-thumb-g),var(--mock-thumb-h))}
+.tourNm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tourStage_photo{}
+.tourApp .tourStage{position:relative;inset:auto;z-index:auto;pointer-events:none;
+  display:flex;align-items:center;justify-content:center;background:var(--canvas)}
+.tourPhoto{width:min(70%,560px);aspect-ratio:3/2;border-radius:8px;position:relative;
+  background:linear-gradient(160deg,var(--mock-photo-a) 0%,var(--mock-photo-b) 58%,var(--mock-photo-c) 100%);
+  box-shadow:0 18px 46px rgba(0,0,0,.45)}
+.tourBadge{position:absolute;right:10px;top:10px;font-size:11px;padding:2px 8px;
+  border-radius:4px;color:var(--keep-ink);border:1px solid var(--keep);
+  background:rgba(63,185,80,.12)}
+.tourMetaLine{position:absolute;left:0;right:0;bottom:8px;text-align:center;
+  font:400 10.5px var(--mono);color:var(--ink-3)}
+.tourActs{display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--line)}
+.tourActsSpacer{flex:1}

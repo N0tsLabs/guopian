@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>过片 Guopian</title>
+<link rel="icon" href="/icon.png">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════ 首页 ═══════════════════════════ -->
+<section id="homeView" class="view">
+  <!-- 首页没有顶栏了：身份信息全在左边那条栏里。
+       帮助按钮不再绝对定位 —— 它和「清空」都属于「最近打开」这一行的动作，
+       放在同一行里由 flex 排版，才不会互相压住。 -->
+
+  <!-- 左边是这台软件的自我介绍，右边是这台机器上的工作。
+       身份信息被关在左栏里，右栏才能专心铺项目、不留一条大空白。 -->
+  <div class="homeScroll">
+    <div class="homeBody">
+      <aside class="homeRail">
+        <div class="brandmark">
+          <!-- 三张错开的画框，最前那张里是"推进"三角 —— 就是程序自己在做的事：
+               一叠照片，一张一张往前推。纯 currentColor，不依赖字体、不引外部资源。 -->
+          <svg class="mark" viewBox="0 0 36 36" width="26" height="26" fill="none" aria-hidden="true"
+               stroke="currentColor" stroke-width="2.2" stroke-linejoin="round">
+            <rect x="13.5" y="3.5" width="19" height="19" rx="3.5" opacity=".28"/>
+            <rect x="9" y="8" width="19" height="19" rx="3.5" opacity=".55"/>
+            <rect x="4.5" y="12.5" width="19" height="19" rx="3.5"/>
+            <path d="M13.6 21.9 20.2 18.1 13.6 14.3Z" fill="currentColor" stroke-width="1.4"/>
+          </svg>
+          <span class="brandName">过片</span>
+        </div>
+
+        <h1 class="railTitle">把每张照片的问题<br><em>逐条列出来</em></h1>
+        <p class="railLine">
+          照片一张一张推到你面前，<kbd>←</kbd> 扔掉、<kbd>→</kbd> 留下。<br>
+          全程在本机跑，不联网，也<strong>不动你的原图</strong>。
+        </p>
+
+        <button class="btn primary block railOpen" id="btnOpen">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+               stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7.5A2 2 0 0 1 5 5.5h3.6a2 2 0 0 1 1.5.7l1 1.3H19a2 2 0 0 1 2 2v7A2 2 0 0 1 19 18.5H5a2 2 0 0 1-2-2z"/>
+          </svg>
+          <span>打开新文件夹</span>
+        </button>
+        <div class="ctaHint" id="faceHint"></div>
+
+        <div class="railFoot">
+          <a class="ghLink" id="ghLink" href="https://github.com/N0ts/guopian"
+             target="_blank" rel="noopener" title="源码与问题反馈">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="currentColor">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A7.995 7.995 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+            </svg>
+            <span>GitHub</span>
+          </a>
+          <span class="version" id="versionLabel"></span>
+          <span class="sp"></span>
+          <button class="iconbtn tiny" id="openSettings" title="设置">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+                 stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3.2"/>
+              <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/>
+            </svg>
+          </button>
+        </div>
+      </aside>
+
+      <main class="homeMain">
+        <div class="mainHead">
+          <span>最近打开</span>
+          <b id="projCount"></b>
+          <span class="sp"></span>
+          <button class="iconbtn" id="homeHelp" title="快捷键">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+                 stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9"/>
+              <path d="M9.6 9.2a2.5 2.5 0 1 1 3.3 2.4c-.6.2-.9.7-.9 1.3v.4"/>
+              <path d="M12 16.6h.01" stroke-width="2.4"/>
+            </svg>
+          </button>
+          <button class="linkbtn" id="clearRecent">清空</button>
+        </div>
+        <div class="projGrid" id="recentList"></div>
+        <div class="mainEmpty hidden" id="projEmpty">
+          还没有打开过任何文件夹。<br>
+          <span>选一个装满照片的目录就能开始 —— 过片会给每张照片逐条列出具体问题。</span>
+        </div>
+      </main>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 筛选界面 ═══════════════════════════ -->
+<section id="appView" class="view hidden">
+  <header class="topbar">
+    <div class="brandmark small" id="backHome" title="返回首页">
+      <svg class="mark" viewBox="0 0 36 36" width="18" height="18" fill="none" aria-hidden="true"
+           stroke="currentColor" stroke-width="2.6" stroke-linejoin="round">
+        <rect x="13.5" y="3.5" width="19" height="19" rx="3.5" opacity=".28"/>
+        <rect x="9" y="8" width="19" height="19" rx="3.5" opacity=".55"/>
+        <rect x="4.5" y="12.5" width="19" height="19" rx="3.5"/>
+        <path d="M13.6 21.9 20.2 18.1 13.6 14.3Z" fill="currentColor" stroke-width="1.8"/>
+      </svg>
+      <span>过片</span>
+    </div>
+    <div class="pathChip" id="rootLabel" title=""></div>
+
+    <div class="progressWrap" id="progressWrap">
+      <div class="progressBar"><i id="progressFill"></i></div>
+      <span class="progressText" id="progressText"></span>
+    </div>
+
+    <div class="topRight">
+      <span class="roBadge hidden" id="roBadge" title="以只读方式打开：筛选照常，但永远不会移动文件">只读</span>
+      <button class="iconbtn" id="btnGrid" title="网格视图 (G)">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9">
+          <rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/>
+          <rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/>
+        </svg>
+      </button>
+      <button class="iconbtn" id="btnTriage" title="按问题筛选 (T)">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9"
+             stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+      </button>
+      <button class="iconbtn" id="btnHelp" title="快捷键 (?)">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+             stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M9.6 9.2a2.5 2.5 0 1 1 3.3 2.4c-.6.2-.9.7-.9 1.3v.4"/>
+          <path d="M12 16.6h.01" stroke-width="2.4"/>
+        </svg>
+      </button>
+      <!-- Settings belongs in the project view too. The gear used to exist only
+           on the home screen, so changing a folder name or a threshold meant
+           leaving the project first for no reason. -->
+      <button class="iconbtn" id="btnSettings" title="设置">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3.2"/>
+          <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/>
+        </svg>
+      </button>
+      <button class="btn primary" id="btnApply">应用决策</button>
+    </div>
+  </header>
+
+  <!-- Always visible. It used to be hidden by default and toggled with T, which
+       meant the one control that tells you how to slice the library was itself
+       invisible until you knew the shortcut. -->
+  <div id="triage" class="triage">
+    <span class="triageLabel">只看</span>
+    <div class="chips" id="triageChips"></div>
+  </div>
+
+  <main class="stageWrap">
+    <!-- 左侧照片列表 -->
+    <aside class="listPane" id="listPane">
+      <div class="listHead">
+        <span class="lhTitle" id="listTitle">全部</span>
+        <span class="lhCount" id="listCount"></span>
+        <button class="iconbtn tiny" id="listHide" title="隐藏列表 (L)">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
+      </div>
+      <div class="listProgress"><i id="listProgressFill"></i></div>
+      <div class="listSummary" id="listSummary"></div>
+      <div class="listScroll" id="listScroll"></div>
+      <button class="listJump" id="listJump" title="跳到下一张还没决定的">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        <span id="listJumpLabel">下一张未决定</span>
+      </button>
+    </aside>
+
+    <button class="listShow hidden" id="listShow" title="显示列表 (L)">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
+    </button>
+
+    <div class="cardArea" id="cardWrap">
+
+      <div class="photoStage" id="photoStage">
+        <!-- 图片层：按真实像素排版 + 只用 translate 平移，所以放大就是原图本身 -->
+        <div class="photoLayer" id="photoLayer">
+          <!-- 决策动效作用在 photoCard 上，与平移/缩放互不干扰 -->
+          <div class="photoCard" id="photoCard">
+            <!-- 预览层：立即出图，保证翻卡不卡 -->
+            <img id="photo" alt="" draggable="false">
+            <!-- 原图层：后台加载，就绪后直接盖上去（同一构图，无闪烁） -->
+            <img id="photoHD" class="hd hidden" alt="" draggable="false">
+            <canvas id="zebra" class="zebra hidden"></canvas>
+            <svg id="overlay" class="overlay hidden" viewBox="0 0 1 1" preserveAspectRatio="none"></svg>
+          </div>
+        </div>
+
+        <!-- 界面浮层：固定在不缩放的视口里，不随图片放大跑出屏幕 -->
+        <div class="previewVeil" id="previewVeil"></div>
+        <div class="previewStamp" id="previewStamp"></div>
+        <div class="zoomBadge hidden" id="zoomBadge"></div>
+
+        <div class="issueTags" id="issueTags"></div>
+        <div class="verdictBadge" id="verdictBadge"></div>
+        <div class="decisionBadge hidden" id="decisionBadge"></div>
+        <div class="histo" id="histo"><canvas id="histoCanvas" width="168" height="52"></canvas></div>
+        <div class="metaLine" id="metaLine"></div>
+        <div class="groupBadge hidden" id="groupBadge"></div>
+      </div>
+
+      <div class="emptyState hidden" id="emptyState">
+        <div class="big" id="emptyTitle">没有照片</div>
+        <div class="small" id="emptyHint"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 底部操作栏：既是键位提醒，也是鼠标可以直接点的按钮 -->
+  <footer class="actionBar">
+    <div class="stats" id="stats"></div>
+
+    <div class="acts">
+      <button class="act reject" data-act="reject" title="不过（键盘 ←，按住可先预览）">
+        <span class="ak">←</span><span class="al" data-label="reject"></span>
+      </button>
+      <button class="act mark" data-act="mark" title="精选（键盘 空格，按住可先预览）">
+        <span class="ak">空格</span><span class="al" data-label="mark"></span>
+      </button>
+      <button class="act keep" data-act="keep" title="要（键盘 →，按住可先预览）">
+        <span class="ak">→</span><span class="al" data-label="keep"></span>
+      </button>
+    </div>
+
+    <div class="navs">
+      <button class="act2" data-act="prev" title="上一张（↑）"><span class="ak">↑</span>上一张</button>
+      <button class="act2" data-act="next" title="下一张（↓）"><span class="ak">↓</span>下一张</button>
+      <button class="act2" data-act="undo" title="撤销（Backspace）"><span class="ak">⌫</span>撤销</button>
+      <button class="act2 quiet" id="hintMore" title="全部快捷键">全部 <span class="ak">?</span></button>
+    </div>
+  </footer>
+</section>
+
+<!-- ═══════════════════════════ 网格 ═══════════════════════════ -->
+<section id="gridView" class="view hidden">
+  <header class="topbar">
+    <button class="btn ghost" id="btnGridClose">← 返回卡片</button>
+    <select id="gridFilter" class="select"></select>
+    <select id="gridSort" class="select">
+      <option value="time">按拍摄时间</option>
+      <option value="suggest">按建议</option>
+      <option value="group">按相似组</option>
+      <option value="sharp">按清晰度</option>
+      <option value="name">按文件名</option>
+    </select>
+    <span class="muted" id="gridCount"></span>
+    <div class="spacer"></div>
+    <button class="btn ghost" id="gridDecideKeep">标为<b data-label="keep"></b></button>
+    <button class="btn ghost" id="gridDecideReject">标为<b data-label="reject"></b></button>
+  </header>
+  <div id="grid" class="grid"></div>
+</section>
+
+<!-- ═══════════════════════════ 文件夹浏览器 ═══════════════════════════ -->
+<div id="browser" class="modal hidden">
+  <div class="browserSheet">
+    <div class="browserHead">
+      <h2>选择照片文件夹</h2>
+      <button class="iconbtn" id="browserClose">✕</button>
+    </div>
+    <div class="roots" id="roots"></div>
+    <div class="crumbs" id="crumbs"></div>
+    <div class="dirList" id="dirList"></div>
+    <div class="browserFoot">
+      <div class="pickedPath" id="pickedPath"></div>
+      <div class="browserBtns">
+        <label class="roToggle"><input type="checkbox" id="roToggle"><span>只读打开（不移动任何文件）</span></label>
+        <button class="btn ghost" id="browserCancel">取消</button>
+        <button class="btn primary" id="browserOpen" disabled>打开这个文件夹</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ 首次引导 ═══════════════════════════ -->
+<div id="coach" class="modal hidden">
+  <div class="coachSheet">
+    <h2>三件事，两个方向</h2>
+    <div class="coachRow">
+      <div class="coachKey"><kbd>→</kbd></div>
+      <div class="coachText"><b data-label="keep"></b><span>这张过</span></div>
+    </div>
+    <div class="coachRow">
+      <div class="coachKey"><kbd>←</kbd></div>
+      <div class="coachText"><b data-label="reject"></b><span>这张不过 —— 不会删文件</span></div>
+    </div>
+    <div class="coachRow">
+      <div class="coachKey"><kbd>空格</kbd></div>
+      <div class="coachText"><b data-label="mark"></b><span>我要，而且这是里面最好的 —— 再按一次取消</span></div>
+    </div>
+    <div class="coachRow">
+      <div class="coachKey"><kbd>↑</kbd><kbd>↓</kbd></div>
+      <div class="coachText"><b>只是翻看</b><span>不改任何状态，拿不准就先往下走</span></div>
+    </div>
+    <p class="coachNote">
+      什么都没按的照片就是<b>还没审</b> —— 不需要额外的"待定"或"跳过"。
+      <b>按住</b> <kbd>←</kbd> <kbd>→</kbd> <kbd>空格</kbd> 会先给你看效果，
+      <b>松手才算数</b>。也可以直接点底部那排按钮。
+    </p>
+    <div class="rowBtns">
+      <button class="linkbtn" id="coachNever">不再显示</button>
+      <button class="btn primary" id="coachOk">开始</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ 应用决策 ═══════════════════════════ -->
+<div id="modal" class="modal hidden"><div class="sheet" id="sheet"></div></div>
+
+<!-- ═══════════════════════════ 快捷键 ═══════════════════════════ -->
+<div id="settings" class="modal hidden">
+  <div class="sheet setSheet">
+    <header class="setHead">
+      <h2>设置</h2>
+      <button class="iconbtn" id="setClose" title="关闭">✕</button>
+    </header>
+    <div class="setBody" id="setBody"></div>
+    <footer class="setFoot">
+      <button class="linkbtn" id="setClear" title="删除生成的缩略图，不动照片">清理缩略图缓存</button>
+      <span class="sp"></span>
+      <button class="btn" id="setReset">恢复默认</button>
+    </footer>
+  </div>
+</div>
+
+<div id="tour" class="tour hidden">
+  <div id="tourStage" class="tourStage"></div>
+  <div id="tourSpot" class="tourSpot"></div>
+  <div id="tourCard" class="tourCard">
+    <div class="tourTop">
+      <span id="tourStepNo"></span>
+      <button id="tourSkip" class="linkbtn">跳过</button>
+    </div>
+    <h3 id="tourTitle"></h3>
+    <p id="tourBody"></p>
+    <div class="tourBtns">
+      <button class="btn ghost" id="tourPrev">上一步</button>
+      <button class="btn primary" id="tourNext">下一步</button>
+    </div>
+  </div>
+</div>
+
+<div id="help" class="modal hidden">
+  <div class="sheet">
+    <h2>快捷键</h2>
+    <table class="keys">
+      <tr><td><kbd>→</kbd> / <kbd>K</kbd></td><td><b data-label="keep"></b> —— 这张过。按住先预览（绿色描边 + 右缘淡染），松手才生效</td></tr>
+      <tr><td><kbd>←</kbd> / <kbd>J</kbd></td><td><b data-label="reject"></b> —— 这张不过。按住先预览（红色描边 + 左缘淡染），松手才生效</td></tr>
+      <tr><td><kbd>空格</kbd></td><td><b data-label="mark"></b> —— 过，而且这是里面最好的。卡片弹一下、金边亮起、右上角落下星标。已经精选的再按一次<b>取消精选</b>，原地不前进</td></tr>
+      <tr><td><kbd>↓</kbd></td><td><b>下一张</b>（只是翻看，不改任何状态）</td></tr>
+      <tr><td><kbd>↑</kbd></td><td><b>上一张</b>（只是翻看，不改任何状态）</td></tr>
+      <tr><td><kbd>Backspace</kbd> / <kbd>Ctrl+Z</kbd></td><td><b>撤销</b> 上一次决定，并退回那一张</td></tr>
+      <tr class="sep"><td colspan="2">查看</td></tr>
+      <tr><td>滚轮</td><td>以光标为中心缩放</td></tr>
+      <tr><td>拖动</td><td>放大后平移画面 · 未放大时左右拖 = 拖卡片，左不过 / 右过（拖回中间即取消）</td></tr>
+      <tr><td>双击</td><td>在「适应窗口」和「100%」之间切换</td></tr>
+      <tr><td><kbd>0</kbd></td><td>恢复适应窗口</td></tr>
+      <tr><td>按住 <kbd>Z</kbd></td><td>临时放大到 100% 看是否对焦，松开还原</td></tr>
+      <tr><td><kbd>I</kbd></td><td>显示 / 隐藏人脸框（默认关闭，避免遮挡照片）</td></tr>
+      <tr><td><kbd>P</kbd></td><td>过曝斑马纹</td></tr>
+      <tr class="sep"><td colspan="2">其它</td></tr>
+      <tr><td><kbd>G</kbd></td><td>网格视图</td></tr>
+      <tr><td><kbd>C</kbd></td><td>跳到相似组内下一张</td></tr>
+      <tr><td><kbd>L</kbd></td><td>显示/隐藏左侧照片列表</td></tr>
+      <tr><td><kbd>F</kbd></td><td>全屏</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>关闭 / 返回</td></tr>
+    </table>
+    <p class="muted small">
+      过片只在本机处理照片，不会上传。不过只是标记，确认后才会移动到
+      <code>_guopian_rejected</code> 文件夹，并且可以一键回滚。
+    </p>
+    <div class="rowBtns"><button class="btn primary" id="helpClose">知道了</button></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<div id="dropVeil" class="dropVeil hidden"><div>松手即打开这个文件夹</div></div>
+
+<!-- 只有一个入口。以前这里是 core.js → home.js → app.js 三个普通 <script>，
+     顺序靠"写在前面"来保证，而 home.js 末尾的 Home.boot() 会在 app.js 还没
+     解析完的时候就去调 App.setLabels() —— 能跑只是因为网络往返比解析慢。
+
+     现在 home.js 是唯一的 <script>，它静态 import 了 app.js（app.js 再 import
+     其余模块）。求值顺序由 import 图保证，不再依赖这里的先后，也不再是一场
+     比赛。type="module" 默认 defer，等价于原来"放在 </body> 前"。 -->
+<script type="module" src="/home.js"></script>
+</body>
+</html>

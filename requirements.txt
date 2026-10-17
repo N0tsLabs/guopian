@@ -1,0 +1,11 @@
+# 过片 Guopian - runtime dependencies
+#
+# OpenCV and NumPy do the classic CV work; MediaPipe adds faces, eyes,
+# expression and gaze in a single Apache-2.0 model.
+pillow>=10.0
+numpy>=1.24
+opencv-python-headless>=4.8 ; platform_system == "Linux"
+opencv-python>=4.8 ; platform_system != "Linux"
+flask>=3.0
+mediapipe>=0.10
+pillow-heif>=0.15
