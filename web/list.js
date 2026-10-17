@@ -363,10 +363,24 @@ async function syncGrid() {
         // 表现为"第一次 Ctrl+点没反应"。
         if (what !== 'commit') { render(); return; }
         const decided = new Set(S.sel);
-        let lastPos = -1;
-        S.queue.forEach((c, k) => { if (decided.has(c.id)) lastPos = k; });
         S.sel.clear();
-        if (lastPos >= 0) S.idx = Math.min(S.queue.length - 1, lastPos + 1);
+
+        // 提交以后落到「第一个还没决策的」。不是简单 +1：
+        // 选了 1,2,3,5,6，刚决定完的只有那五张，4 还没碰过 ——
+        // 该跳回 4，而不是 7。连续的一组（5-8）自然就落到 9。
+        const isDecided = (k) => decided.has(S.queue[k].id) || !!S.queue[k].decision;
+        let start = -1, lastPos = -1;
+        S.queue.forEach((c, k) => {
+          if (!decided.has(c.id)) return;
+          if (start < 0) start = k;
+          lastPos = k;
+        });
+        let next = -1;
+        for (let k = Math.max(0, start); k < S.queue.length; k++) {
+          if (!isDecided(k)) { next = k; break; }
+        }
+        if (next < 0 && lastPos >= 0) next = Math.min(S.queue.length - 1, lastPos + 1);
+        if (next >= 0) S.idx = next;
         render();
       });
     } else if (DecideGrid.isOpen()) {
