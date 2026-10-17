@@ -1785,6 +1785,14 @@ code{font:400 11.5px var(--mono);color:var(--ink-2);
   max-width:94vw;max-height:92vh;object-fit:contain;
   box-shadow:0 24px 80px rgba(0,0,0,.7);border-radius:4px;
 }
+.dgZoomBadge{
+  position:fixed;left:50%;top:18px;transform:translateX(-50%);
+  font:600 13px var(--ui);letter-spacing:.04em;
+  padding:4px 14px;border-radius:999px;color:transparent;
+}
+.dgZoomBadge.on{color:var(--keep-ink);border:1px solid var(--keep);
+  background:rgba(0,0,0,.55)}
+.dgZoomBadge.mark{color:var(--mark-ink);border-color:var(--mark)}
 .dgZoomHint{
   position:fixed;left:0;right:0;bottom:18px;text-align:center;
   font:400 11.5px var(--ui);color:var(--ink-3);pointer-events:none;

@@ -58,7 +58,9 @@ const DecideGrid = (() => {
     // 放大层：单独一个元素，盖住整个窗口
     zoomEl = document.createElement('div');
     zoomEl.className = 'dgZoom hidden';
-    zoomEl.innerHTML = '<img alt="" draggable="false"><div class="dgZoomHint">空格 关闭 · 也可以直接点一下</div>';
+    zoomEl.innerHTML = '<img alt="" draggable="false">'
+      + '<div class="dgZoomBadge"></div>'
+      + '<div class="dgZoomHint">← → 切换 · K 留下 · S 精选 · 空格 / Esc 关闭</div>';
     document.body.appendChild(zoomEl);
     zoomEl.onclick = () => closeZoom();
     $('#dgEsc', root).onclick = () => close();
@@ -239,12 +241,24 @@ const DecideGrid = (() => {
 
 /** 放大看当前聚焦的那一张。空格打开，Esc 或点一下关闭。 */
 function openZoom() {
+  if (!zoomEl) return false;
+  zoomEl.classList.remove('hidden');
+  paintZoom();
+  return true;
+}
+
+/** 放大层显示当前聚焦的那一张，并把它的状态写在角上。
+ *  放大以后左右翻，看到的还是同一套标记，不用退出去确认。 */
+function paintZoom() {
+  if (!zoomEl || zoomEl.classList.contains('hidden')) return;
   const id = ids[focus];
-  if (id == null || !zoomEl) return false;
+  if (id == null) return;
   const img = zoomEl.querySelector('img');
   img.src = '/img/' + id + '/card';
-  zoomEl.classList.remove('hidden');
-  return true;
+  const p = stateOf(id);
+  const badge = zoomEl.querySelector('.dgZoomBadge');
+  badge.textContent = p === 'mark' ? '★ 精选' : (p === 'keep' ? '✓ 留下' : '');
+  badge.className = 'dgZoomBadge' + (p ? ' on' : '') + (p === 'mark' ? ' mark' : '');
 }
 
 function closeZoom() {
@@ -267,6 +281,27 @@ function isZoomed() {
       close();
       return true;
     }
+
+    // ── 放大状态：一套单独的键位 ──
+    // 看清楚了就当场决定，不用退出去；左右翻还是同一组照片。
+    if (isZoomed()) {
+      if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown') {
+        e.preventDefault();
+        const d = (k === 'ArrowLeft' || k === 'ArrowUp') ? -1 : 1;
+        focus = Math.max(0, Math.min(ids.length - 1, focus + d));
+        paint();
+        paintZoom();
+        return true;
+      }
+      if (k === 'k' || k === 'K') {
+        e.preventDefault(); toggle(ids[focus], 'keep'); paint(); paintZoom(); return true;
+      }
+      if (k === 's' || k === 'S') {
+        e.preventDefault(); toggle(ids[focus], 'mark'); paint(); paintZoom(); return true;
+      }
+      return true;   // 放大时其它键一律吃掉，不要漏到底下的网格
+    }
+
     if (k === ' ') {
       // 空格 = 放大查看，不是「留下」。
       // 在网格里「留下」已经有点击这个动作，空格用来仔细看更顺手；
