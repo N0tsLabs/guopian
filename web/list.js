@@ -357,15 +357,16 @@ async function syncGrid() {
       // 每次都重新打开，不是只在没开的时候开：多选一张就要多一个格子，
       // 否则网格会一直停在第一次打开时的数量上。
       DecideGrid.open(Array.from(S.sel), (what) => {
-        // 提交以后跳过刚决定完的整组，落到它后面那一张。
-        // 一组处理完就该往下走，而不是停在刚刚挑过的那张上。
+        // 只有真的提交了才清空选择。
+        // 这个回调在 syncGrid 自己关掉网格时也会跑（比如选中数掉到 1），
+        // 那时候如果也清空，就会把用户刚点出来的选择一起抹掉 ——
+        // 表现为"第一次 Ctrl+点没反应"。
+        if (what !== 'commit') { render(); return; }
         const decided = new Set(S.sel);
         let lastPos = -1;
         S.queue.forEach((c, k) => { if (decided.has(c.id)) lastPos = k; });
         S.sel.clear();
-        if (what === 'commit' && lastPos >= 0) {
-          S.idx = Math.min(S.queue.length - 1, lastPos + 1);
-        }
+        if (lastPos >= 0) S.idx = Math.min(S.queue.length - 1, lastPos + 1);
         render();
       });
     } else if (DecideGrid.isOpen()) {
