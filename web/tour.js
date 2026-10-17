@@ -44,7 +44,7 @@ const Tour = (() => {
         <div class="tourProjGrid" data-ref="recent">
           <div class="tourProj">
             <div class="tourProjCover"></div>
-            <div class="tourProjMeta"><b>川西</b><span>93 张 · 已审完</span></div>
+            <div class="tourProjMeta"><b>旅行照片</b><span>93 张 · 已审完</span></div>
           </div>
           <div class="tourProj">
             <div class="tourProjCover alt"></div>
@@ -57,7 +57,7 @@ const Tour = (() => {
   const MOCK_PROJ = `
     <div class="tourApp">
       <div class="tourTop">
-        <span class="tourTopName">川西</span>
+        <span class="tourTopName">旅行照片</span>
         <span class="tourTopSpacer"></span>
         <button class="btn primary" data-ref="apply">应用决策</button>
       </div>

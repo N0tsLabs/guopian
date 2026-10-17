@@ -16,7 +16,7 @@ sys.path.insert(0, ROOT)
 
 from guopian import config, faces as faces_mod  # noqa: E402
 
-FOLDER = r"D:\image cache\川西\100MSDCF"
+FOLDER = r"D:\photos\shoot"
 
 
 def main() -> int:

@@ -5,7 +5,7 @@ import sys
 sys.path.insert(0, '.')
 from guopian import config, paths, phash  # noqa: E402
 
-cp = os.path.join(paths.catalog_dir(r'D:\image cache\川西\100MSDCF'), 'catalog.db')
+cp = os.path.join(paths.catalog_dir(r'D:\photos\shoot'), 'catalog.db')
 con = sqlite3.connect('file:{}?mode=ro'.format(cp.replace('\\', '/')), uri=True)
 con.row_factory = sqlite3.Row
 

@@ -15,7 +15,7 @@ sys.path.insert(0, '.')
 from guopian import paths  # noqa: E402
 
 B = 'http://127.0.0.1:8765'
-FOLDER = r'D:\image cache\川西\100MSDCF'
+FOLDER = r'D:\photos\shoot'
 BY_DIR = {'过': 'keep', '不过': 'reject', '精选': 'mark'}
 
 

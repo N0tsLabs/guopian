@@ -19,7 +19,7 @@ import re
 import os
 import sys
 
-PHOTO_DIR = r"D:\image cache\川西\100MSDCF"
+PHOTO_DIR = r"D:\photos\shoot"
 CONTROL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                        ".cache")
 

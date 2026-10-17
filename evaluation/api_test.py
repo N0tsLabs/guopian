@@ -7,8 +7,8 @@ import urllib.parse
 import urllib.request
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8850"
-FOLDER = r"D:\image cache\川西\100MSDCF"
-PARENT = r"D:\image cache\川西"
+FOLDER = r"D:\photos\shoot"
+PARENT = r"D:\photos"
 
 
 def call(path, method="GET", body=None, timeout=120, raw=False):
@@ -51,7 +51,7 @@ fails += show("GET /api/fs/roots", st == 200 and roots.get("roots"),
 
 print("\n== 3. 应用内目录浏览（中文路径）==")
 st, d = call("/api/fs/list?path=" + urllib.parse.quote(PARENT))
-fails += show("GET /api/fs/list 川西", st == 200 and d.get("path") == PARENT,
+fails += show("GET /api/fs/list 旅行照片", st == 200 and d.get("path") == PARENT,
               "直属 {} 张".format(d.get("photos")))
 for sub in (d.get("dirs") or []):
     print("        📁 {:<12} {} 张".format(sub["name"], sub["photos"]))

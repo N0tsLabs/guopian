@@ -17,7 +17,7 @@ turned head -- which is most candid portraits.
 So before replacing anything: measure both on the same faces, and see how much
 of the geometric signal is just yaw.
 
-    python evaluation/gaze_compare.py "D:\\image cache\\川西\\100MSDCF" [limit]
+    python evaluation/gaze_compare.py "D:\photos\shoot" [limit]
 """
 from __future__ import annotations
 

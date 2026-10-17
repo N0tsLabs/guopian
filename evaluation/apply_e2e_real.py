@@ -20,7 +20,7 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-SRC = r"D:\image cache\川西\100MSDCF"
+SRC = r"D:\photos\shoot"
 MIRROR = os.path.join(ROOT, ".cache", "realtest", "100MSDCF")
 API = "http://127.0.0.1:8765"
 

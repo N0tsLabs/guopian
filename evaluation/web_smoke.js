@@ -156,16 +156,16 @@ const HOME = {
   version: '0.1.0', generation: 1, platform: 'windows',
   face_available: { ok: true, message: null },
   recent: [
-    { path: 'D:\\image cache\\川西\\100MSDCF', name: '100MSDCF', at: 1,
+    { path: 'D:\photos\shoot', name: '100MSDCF', at: 1,
       analyzed: 93, total: 93, decided: 4, has_catalog: true },
-    { path: 'D:\\image cache\\川西\\101MSDCF', name: '101MSDCF', at: 2,
+    { path: 'D:\photos\\101MSDCF', name: '101MSDCF', at: 2,
       analyzed: 0, total: 1428, decided: 0, has_catalog: false },
   ],
   current: null,
 };
 
 const STATE = {
-  root: 'D:\\image cache\\川西\\100MSDCF', work_dir: 'C:\\cat',
+  root: 'D:\photos\shoot', work_dir: 'C:\\cat',
   read_only: true, generation: 1,
   progress: { phase: 'done', total: 93, done: 93, rate: 17, elapsed: 5.4, running: false },
   counts: { total: 93, analyzed: 93,
@@ -206,9 +206,9 @@ function fakeFetch(url, opts) {
   if (u.includes('/api/photo/')) return jsonResponse(PHOTO_DETAIL);
   if (u.includes('/api/fs/roots')) return jsonResponse({ roots: [{ name: 'D:', label: '', path: 'D:\\' }], home: 'C:\\Users' });
   if (u.includes('/api/fs/list')) {
-    return jsonResponse({ path: 'D:\\image cache\\川西', name: '川西', parent: 'D:\\image cache',
+    return jsonResponse({ path: 'D:\photos', name: '旅行照片', parent: 'D:\photos',
                           photos: 0, error: null,
-                          dirs: [{ name: '100MSDCF', path: 'D:\\image cache\\川西\\100MSDCF', photos: 93 }] });
+                          dirs: [{ name: '100MSDCF', path: 'D:\photos\shoot', photos: 93 }] });
   }
   return jsonResponse({ ok: true });
 }

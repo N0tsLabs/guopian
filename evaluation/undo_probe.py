@@ -10,7 +10,7 @@ import time
 import urllib.request
 
 B = 'http://127.0.0.1:8765'
-FOLDER = r'D:\image cache\川西\100MSDCF'
+FOLDER = r'D:\photos\shoot'
 
 
 def call(path, body=None):
