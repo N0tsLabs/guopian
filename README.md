@@ -12,8 +12,6 @@
 
 </div>
 
-![](docs/img/card.png)
-
 ## 它解决什么
 
 翻开一个几千张的文件夹，你不知道从哪看起。一张张双击、判断、重命名、移动，
@@ -64,6 +62,8 @@
    **没审过的留在原地。**
 
 按键可以按住预览、松手才生效；拖动卡片也能做决定。完整键位在应用里按 <kbd>?</kbd>。
+
+第一次打开项目会有一个简短的引导，用演示画面走一遍流程，不碰你自己的照片。
 
 ## 你的照片是安全的
 
@@ -121,6 +121,6 @@ Python + Flask 起一个本地服务，前端是十一个浏览器原生 ES modu
 
 ## 第三方
 
-- [MediaPipe](https://github.com/google-ai-edge/mediapipe) — 人脸检测（Apache-2.0）
+- [MediaPipe](https://github.com/google/ai-edge-mediapipe) — 人脸检测（Apache-2.0）
 - [Flask](https://flask.palletsprojects.com/) — 本地服务（BSD-3）
 - [Pillow](https://python-pillow.org/) · [OpenCV](https://opencv.org/) · [NumPy](https://numpy.org/)
