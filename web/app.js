@@ -491,10 +491,18 @@ async function applyDialog() {
       <span>上次归档：<b>${last.n}</b> 张 · ${fmtWhen(last.at)}</span>
       <button class="btn ghost" id="apUndo">把上次归档撤回</button>
     </div>` : '';
+  // 重置放在这屏：想从头再来的时候，人就在这个对话框里。
+  // 它清的是决策，不动任何文件，而且整批可撤回。
+  const resetBar = `
+    <div class="undoBar resetBar">
+      <span>想从头再来：清掉这个项目的全部决策，照片一张都不动。</span>
+      <button class="btn ghost" id="apReset">重置全部决策</button>
+    </div>`;
   el.sheet.innerHTML = `
     <h2>应用决策</h2>
     <p class="muted small">筛选过程没有动过任何文件。下面是即将执行的唯一一次文件操作。</p>
     ${undoBar}
+    ${resetBar}
     <h3>将把 <b style="color:#ff8b84">${pv.count}</b> 张照片归入三个文件夹</h3>
     ${pv.groups.map(g => `
       <div class="applyRow">
@@ -517,6 +525,23 @@ async function applyDialog() {
       <button class="btn ghost" id="apXmp">只写 XMP 标记（不动文件）</button>
       <button class="btn primary" id="apGo" ${ro ? 'disabled' : ''}>确认移动 ${pv.count} 张</button>
     </div>`;
+  const resetBtn = $('#apReset');
+  if (resetBtn) {
+    resetBtn.onclick = async () => {
+      const n = (st.counts.decisions.keep || 0) + (st.counts.decisions.mark || 0)
+              + (st.counts.decisions.reject || 0);
+      // 二次确认：动全库的动作，点两次。
+      if (!window.confirm(`要把这个项目的 ${n} 张决策全部清掉吗？\n\n照片不会被移动或删除，只是回到"还没看过"的状态。\n清掉以后还可以用 ⌫ 整批撤回。`)) return;
+      const r = await api('/api/reset', { method: 'POST', body: JSON.stringify({ confirm: true }) });
+      if (!r || !r.ok) { toast('重置失败：' + ((r && r.error) || ''), 'err'); return; }
+      window.__lastBatch = r.batch;
+      closeModal();
+      toast(`已清掉 ${r.result.cleared} 张决策 · ⌫ 可撤回`);
+      await loadState();
+      loadQueue();
+    };
+  }
+
   const undoBtn = $('#apUndo');
   if (undoBtn) {
     undoBtn.onclick = async () => {

@@ -553,6 +553,25 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
             prev.append({"id": pid, "prev": lib.store.set_decision(int(pid), action, batch)})
         return jsonify({"ok": True, "action": action, "count": len(ids), "prev": prev})
 
+    @app.post("/api/reset")
+    def reset_all():
+        """清空这个项目的全部决策。
+
+        需要 confirm: true —— 和归档一样，动全库的动作要用户明确点两次。
+        记成一个批次，所以整批可以撤回。
+        """
+        lib, err = need_lib()
+        if err:
+            return err
+        body = request.get_json(silent=True) or {}
+        if not body.get("confirm"):
+            return jsonify({"ok": False,
+                            "error": "需要确认：这会清掉这个项目的全部决策"}), 409
+        import uuid as _uuid
+        batch = "reset-" + _uuid.uuid4().hex[:8]
+        res = lib.store.reset_all(batch)
+        return jsonify({"ok": True, "batch": batch, "result": res})
+
     @app.post("/api/undo")
     def undo():
         lib, err = need_lib()

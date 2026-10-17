@@ -470,6 +470,21 @@ class Store:
         con.commit()
         return prev
 
+    def reset_all(self, batch: str | None = None) -> dict:
+        """Clear every decision in the library, as one undoable batch.
+
+        Same mechanism as deciding a group in the grid: each photo goes through
+        set_decision(CLEAR), which logs the previous value, so the whole reset
+        can be taken back with undo_batch(batch). A reset that could not be
+        undone would be the only destructive button in the app.
+        """
+        rows = self.conn.execute(
+            "SELECT id FROM photos WHERE decision IS NOT NULL AND decision <> ''"
+        ).fetchall()
+        for r in rows:
+            self.set_decision(r["id"], config.CLEAR, batch)
+        return {"cleared": len(rows), "batch": batch}
+
     def undo_batch(self, batch: str) -> dict:
         """Revert every decision a single batch made.
 
