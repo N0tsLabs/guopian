@@ -412,6 +412,16 @@ function paintSelection() {
   if (typeof highlightCurrent === 'function') highlightCurrent();
 }
 
+
+// 用户关掉决策网格（Esc / 取消按钮）时，把左侧的选择一起清掉 ——
+// 只剩下单图视图，左侧却还亮着一排，那是两套状态打架。
+window.addEventListener('guopian:gridcancel', () => {
+  if (!S.sel || !S.sel.size) return;
+  S.sel.clear();
+  S.multi = false;
+  render();
+});
+
 export { posKey, savedPos, savePos, sessKey, savedSession, saveSession,
          pickStartIndex, itemHTML, observeThumbs,
   renderList, renderListSummary, highlightCurrent, updateListProgress,

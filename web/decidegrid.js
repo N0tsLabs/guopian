@@ -211,6 +211,9 @@ const DecideGrid = (() => {
   /** 用户按 Esc / 点取消：退出并把选择清空。 */
   function close() {
     if (root) root.classList.add('hidden');
+    // 广播，不等回调 —— onDone 可能已经被上一次 close 或 syncGrid 用掉了，
+    // 那样用户按 Esc 之后左侧的选择就清不掉（表现为"退出了多图，左边还亮着"）。
+    window.dispatchEvent(new CustomEvent('guopian:gridcancel'));
     if (onDone) { const f = onDone; onDone = null; f('cancel'); }
   }
 
