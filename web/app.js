@@ -144,13 +144,18 @@ async function ensureFaceModel() {
   }
 }
 
+// 进度条的点击在模块加载时就绑上。
+// 之前放在 start() 里，而已打开的库在刷新后走的是 attach()，不走 start()
+// —— 于是刷新一次，进度条就再也点不开了。
+(function bindProgressClick() {
+  const pw = document.getElementById('progressWrap');
+  if (!pw) return;
+  pw.onclick = (e) => { e.stopPropagation(); toggleProgPanel(); };
+  pw.title = '点击查看分类明细';
+})();
+
 function start() {
   ensureFaceModel();
-  const pw = document.getElementById('progressWrap');
-  if (pw) {
-    pw.onclick = (e) => { e.stopPropagation(); toggleProgPanel(); };
-    pw.title = '点击查看分类明细';
-  }
   if (!S.running) { grab(); bind(); S.running = true; }
   S.filter = 'all'; S.idx = 0;
   loadState().then(loadQueue);
@@ -225,7 +230,10 @@ function drawProgPanel(p) {
   if (!panel) return;
   const rows = [];
   const total = (S.state && S.state.counts && S.state.counts.total) || p.total || 0;
-  const done = p.done || 0;
+  // 分析跑完以后 p.done 会归零，这时要读 state 里的已分析张数，
+  // 否则面板上写着「已分析 0 / 93」，明明全都分析完了。
+  const done = p.running ? (p.done || 0)
+    : ((S.state && S.state.counts && S.state.counts.analyzed) || p.done || total);
 
   rows.push(`<div class="progRow"><span class="nm">已分析</span>
     <span class="n">${done} / ${total}</span></div>
