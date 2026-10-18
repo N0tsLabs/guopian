@@ -453,6 +453,24 @@ def fs_list(path: str | None) -> dict:
 
 # ------------------------------------------------------------------ session
 
+# 关掉一个库以后，分析任务不跟着停 —— 用户回首页了，但扫描还在跑。
+# 放在这里按 catalog 目录索引，再次打开同一个库时接上它，而不是新建一个
+# 从零开始的 Library（那样进度会归零、工作白做）。
+#
+# 只保留最近几个：一直切库的话，每个都留一个线程池会把 CPU 和内存吃光。
+_DETACHED: dict[str, object] = {}
+_DETACHED_MAX = 2
+
+
+def _drop_oldest() -> None:
+    while len(_DETACHED) > _DETACHED_MAX:
+        k = next(iter(_DETACHED))
+        try:
+            _DETACHED.pop(k).cancel()
+        except Exception:
+            pass
+
+
 class Session:
     def __init__(self, read_only: bool = False, workers: int | None = None):
         self.lock = threading.RLock()
@@ -472,9 +490,19 @@ class Session:
         if not os.path.isdir(folder):
             raise NotADirectoryError(folder)
         with self.lock:
+            wd = work_dir or paths.catalog_dir(folder)
+            # 这个库刚被放下、分析还在跑 —— 接回来，别从零开始。
+            # 新建一个 Library 会让进度归零，前面扫过的全白做。
+            prev = _DETACHED.pop(wd, None)
+            if prev is not None and getattr(prev, "root", None) == folder:
+                if self.lib is not None and self.lib is not prev:
+                    self.lib.cancel()
+                self.lib = prev
+                self.generation += 1
+                remember(folder)
+                return prev
             if self.lib is not None:
                 self.lib.cancel()
-            wd = work_dir or paths.catalog_dir(folder)
             ro = self.read_only if read_only is None else read_only
             lib = Library(folder, workers=self.workers, work_dir=wd, read_only=ro)
             self.lib = lib
@@ -487,7 +515,11 @@ class Session:
     def close(self) -> None:
         with self.lock:
             if self.lib is not None:
-                self.lib.cancel()
+                # 不取消：用户只是回首页，扫描该继续跑完。
+                # 放进 _DETACHED，下次打开同一个库时 open() 会把它接回来。
+                wd = getattr(self.lib, "work_dir", None) or paths.catalog_dir(self.lib.root)
+                _DETACHED[wd] = self.lib
+                _drop_oldest()
                 self.lib = None
                 self.generation += 1
 

@@ -218,3 +218,4 @@ sqlite3.OperationalError: no such column: analysis_version
 [2026-10-18T18:54:51] start with no folder (home screen), frozen=False
 [2026-10-18T18:56:44] start with no folder (home screen), frozen=False
 [2026-10-18T19:21:59] start with no folder (home screen), frozen=False
+[2026-10-18T19:41:22] start with no folder (home screen), frozen=False
