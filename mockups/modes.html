@@ -86,38 +86,49 @@ button{font:inherit;color:inherit;cursor:pointer}
 .tile.keep .tag{background:var(--keep)}
 .tile.mark .tag{background:var(--mark);color:var(--on-mark)}
 
-/* 悬停时贴底浮出一条操作栏。
-   两个按钮各占一半，整条有 34px 高 —— 之前那两个小药丸太小，
-   而且要瞄着点；贴底整条既好点，也不会盖住画面中心。 */
+/* 按项目自己的按钮定义来做：.btn 是 30px 高、12.5px 字、1px 细边、
+   圆角 --r2、ghost 时背景透明。不另外发明一套。
+   照片上直接放透明按钮看不清，所以只在底部加一道很轻的渐变兜底，
+   不是一条实心色块。 */
 .actions{
-  position:absolute;left:0;right:0;bottom:0;height:34px;
-  display:flex;opacity:0;pointer-events:none;
-  transition:opacity .14s ease;
+  position:absolute;left:0;right:0;bottom:0;
+  padding:22px 10px 10px;
+  display:flex;gap:6px;justify-content:center;
+  background:linear-gradient(to top, rgba(0,0,0,.62), rgba(0,0,0,0));
+  opacity:0;pointer-events:none;transition:opacity .14s ease;
 }
 .tile:hover .actions,.tile.keep .actions,.tile.mark .actions{opacity:1;pointer-events:auto}
 .actions button{
-  flex:1;border:none;border-top:1px solid rgba(255,255,255,.14);
-  background:rgba(10,12,15,.78);color:#dfe3e8;
-  font:600 12px/1 inherit;letter-spacing:.02em;
-  backdrop-filter:blur(8px);transition:background .12s,color .12s;
+  height:30px;padding:0 14px;
+  font-size:12.5px;font-weight:550;letter-spacing:.01em;
+  border:1px solid rgba(255,255,255,.28);border-radius:6px;
+  background:transparent;color:var(--on-solid);
+  transition:border-color .12s,color .12s,background .12s;
+  white-space:nowrap;
 }
-.actions button+button{border-left:1px solid rgba(255,255,255,.10)}
-.actions button:hover{background:rgba(10,12,15,.92)}
-.actions .aKeep:hover{color:var(--keep)}
-.actions .aMark:hover{color:var(--mark)}
-/* 已经标在这张上，对应那一半点亮 */
-.tile.keep .aKeep{background:rgba(63,185,80,.22);color:var(--keep)}
-.tile.mark .aMark{background:rgba(227,179,65,.20);color:var(--mark)}
+.actions button:hover{background:rgba(255,255,255,.08)}
+.actions .aKeep:hover{border-color:var(--keep);color:var(--keep)}
+.actions .aMark:hover{border-color:var(--mark);color:var(--mark)}
+/* 已经标在这张上的，对应那个按钮变成实心，和 .btn.primary 同一个逻辑 */
+.tile.keep .aKeep{background:var(--keep);border-color:var(--keep);color:var(--on-solid);font-weight:600}
+.tile.mark .aMark{background:var(--mark);border-color:var(--mark);color:var(--on-mark);font-weight:600}
 
-/* 角标：圆形图标，不写字。和左侧列表里的 ✓ ✕ ★ 是同一套符号。 */
+/* 决定状态用左侧竖条表示 —— 和左侧列表的 .listItem 是同一套语言，
+   不是往角上贴一个色块。 */
+.tile{border-left-width:3px}
+.tile.keep{border-left-color:var(--keep)}
+.tile.mark{border-left-color:var(--mark)}
+
+/* 角标：裸字符，不画圆。和列表里那个 ✓ ✕ ★ 一样，
+   只加一点阴影保证在亮画面上也看得见。 */
 .flag{
-  position:absolute;right:10px;top:10px;width:24px;height:24px;border-radius:50%;
+  position:absolute;right:10px;top:8px;
   display:none;align-items:center;justify-content:center;
-  font-size:13px;line-height:1;
-  box-shadow:0 2px 10px rgba(0,0,0,.55);
+  font-size:15px;font-weight:700;line-height:1;
+  text-shadow:0 1px 4px rgba(0,0,0,.85);
 }
-.tile.keep .flag{display:flex;background:var(--keep);color:var(--on-solid)}
-.tile.mark .flag{display:flex;background:var(--mark);color:var(--on-mark)}
+.tile.keep .flag{display:flex;color:var(--keep)}
+.tile.mark .flag{display:flex;color:var(--mark)}
 
 /* ── 放大层 ── */
 .zoom{
