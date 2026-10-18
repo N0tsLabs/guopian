@@ -416,9 +416,16 @@ function paintSelection() {
 // 用户关掉决策网格（Esc / 取消按钮）时，把左侧的选择一起清掉 ——
 // 只剩下单图视图，左侧却还亮着一排，那是两套状态打架。
 window.addEventListener('guopian:gridcancel', () => {
-  if (!S.sel || !S.sel.size) return;
-  S.sel.clear();
+  // 无条件重画。之前这里是「size 为 0 就直接 return」，
+  // 而 S.sel 可能已经被回调那条路清空了 —— size 是 0，DOM 里却还留着
+  // 上一次 paintSelection() 加上的 .sel 类，于是左侧一直亮着。
+  // 清什么不重要，重要的是把列表重画一遍。
+  if (S.sel) S.sel.clear();
   S.multi = false;
+  // 不能只靠 render()：这个模块里的 render 默认是空函数（app.js 通过
+  // configure 注入，而 configure 在本项目里从没被调用过）。
+  // 直接按当前 S.sel 重画一遍选中状态，才是真正把 .sel 类去掉的那一步。
+  paintSelection();
   render();
 });
 
