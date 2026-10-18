@@ -90,6 +90,7 @@ function grab() {
   Object.assign(el, {
     root: $('#rootLabel'), stats: $('#stats'), roBadge: $('#roBadge'),
     progressFill: $('#progressFill'), progressText: $('#progressText'),
+  progPanel: null,
     cardWrap: $('#cardWrap'), photoStage: $('#photoStage'), photo: $('#photo'),
     photoHD: $('#photoHD'), photoLayer: $('#photoLayer'), photoCard: $('#photoCard'),
     zebra: $('#zebra'), overlay: $('#overlay'), issueTags: $('#issueTags'),
@@ -145,6 +146,11 @@ async function ensureFaceModel() {
 
 function start() {
   ensureFaceModel();
+  const pw = document.getElementById('progressWrap');
+  if (pw) {
+    pw.onclick = (e) => { e.stopPropagation(); toggleProgPanel(); };
+    pw.title = '点击查看分类明细';
+  }
   if (!S.running) { grab(); bind(); S.running = true; }
   S.filter = 'all'; S.idx = 0;
   loadState().then(loadQueue);
@@ -202,20 +208,88 @@ function renderStats(st) {
   el.stats.innerHTML = parts.join('');
 }
 
+/** 秒数说人话：2 分钟比 134 秒好读。 */
+function fmtEta(sec) {
+  const s = Math.ceil(sec);
+  if (s < 60) return s + ' 秒';
+  const m = Math.floor(s / 60);
+  return m + ' 分' + (s % 60 ? ' ' + (s % 60) + ' 秒' : '');
+}
+
+/** 点进度条展开的分类明细。
+ *
+ * 类别直接从左边那条筛选条读 —— 它是唯一一处算这些数字的地方，
+ * 再算一遍迟早会和它对不上。 */
+function drawProgPanel(p) {
+  const panel = el.progPanel;
+  if (!panel) return;
+  const rows = [];
+  const total = (S.state && S.state.counts && S.state.counts.total) || p.total || 0;
+  const done = p.done || 0;
+
+  rows.push(`<div class="progRow"><span class="nm">已分析</span>
+    <span class="n">${done} / ${total}</span></div>
+    <div class="progBar2"><i style="width:${total ? Math.round(100 * done / total) : 0}%"></i></div>`);
+
+  const chips = document.querySelectorAll('#triageChips .chip');
+  const found = [];
+  chips.forEach((c) => {
+    const t = (c.textContent || '').trim();
+    const m = t.match(/^(.*?)\s*(\d+)$/);
+    if (!m) return;
+    const n = +m[2];
+    if (!n) return;
+    if (/^(全部|未审|过|不过|精选|有明显问题|有人脸|连拍|相似组)$/.test(m[1].trim())) return;
+    found.push([m[1].trim(), n]);
+  });
+  found.sort((a, b) => b[1] - a[1]);
+  if (found.length) {
+    rows.push('<h4 style="margin-top:10px">检测到的问题</h4>');
+    const mx = found[0][1] || 1;
+    found.forEach(([nm, n]) => {
+      rows.push(`<div class="progRow"><span class="nm">${esc(nm)}</span>
+        <span class="n">${n}</span></div>
+        <div class="progBar2"><i style="width:${Math.round(100 * n / mx)}%"></i></div>`);
+    });
+  }
+  panel.innerHTML = rows.join('');
+}
+
+let _progOpen = false;
+
+/** 点顶栏的进度条，展开 / 收起分类明细。 */
+function toggleProgPanel() {
+  if (!el.progPanel) {
+    el.progPanel = document.createElement('div');
+    el.progPanel.className = 'progPanel hidden';
+    document.body.appendChild(el.progPanel);
+  }
+  _progOpen = !_progOpen;
+  el.progPanel.classList.toggle('hidden', !_progOpen);
+  if (_progOpen) drawProgPanel(S.lastProgress || {});
+}
+
 function renderProgress(p) {
+  S.lastProgress = p;   // 点开明细时要用最近一次的数据
   const pct = p.total ? Math.round(100 * p.done / p.total) : 0;
   el.progressFill.style.width = pct + '%';
+  const bar = document.querySelector('.progressBar');
+  if (bar) bar.classList.toggle('running', !!p.running);
+
   if (p.running) {
+    const what = p.phase === 'scan' ? '扫描' : '分析';
     el.progressText.textContent =
-      `${p.phase === 'scan' ? '扫描' : '分析'} ${p.done}/${p.total} · ${p.rate || 0}/s` +
-      (p.eta ? ` · 剩 ~${Math.ceil(p.eta)}s` : '');
+      `${what} ${p.done}/${p.total} · ${pct}% · ${p.rate || 0}/s` +
+      (p.eta ? ` · 剩 ~${fmtEta(p.eta)}` : '');
   } else if (p.phase === 'done') {
-    el.progressText.textContent = `分析完成 · ${p.elapsed}s`;
+    const n = (S.state && S.state.counts && S.state.counts.analyzed) || p.total || 0;
+    el.progressText.textContent = `分析完成 · ${n} 张 · ${p.elapsed}s`;
   } else if (p.phase === 'error') {
     el.progressText.textContent = '分析出错，见日志';
   } else {
     el.progressText.textContent = p.message || '';
   }
+  if (el.progPanel && !el.progPanel.classList.contains('hidden')) drawProgPanel(p);
 }
 
 function renderTriage(st) {
