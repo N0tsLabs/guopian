@@ -11,7 +11,7 @@ BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8850"
 FOLDER = os.environ.get("GUOPIAN_TEST_FOLDER", r"D:\photos\shoot")
 # 用一个真实存在、并且已经审过一批照片的库来跑。
 # 仓库里不写死任何人的路径。
-PARENT = r"D:\photos"
+PARENT = os.path.dirname(FOLDER)
 
 
 def call(path, method="GET", body=None, timeout=120, raw=False):
