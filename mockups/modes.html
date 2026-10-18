@@ -86,35 +86,35 @@ button{font:inherit;color:inherit;cursor:pointer}
 .tile.keep .tag{background:var(--keep)}
 .tile.mark .tag{background:var(--mark);color:var(--on-mark)}
 
-/* 悬停浮出的两个按钮。
-   不做「未标记 / 选中」这种文字标签 —— 状态靠边框和角标表达，
-   文字只用来说明"能做什么"，不用来描述"现在是什么"。 */
+/* 悬停时贴底浮出一条操作栏。
+   两个按钮各占一半，整条有 34px 高 —— 之前那两个小药丸太小，
+   而且要瞄着点；贴底整条既好点，也不会盖住画面中心。 */
 .actions{
-  position:absolute;left:50%;bottom:10px;transform:translate(-50%,6px);
-  display:flex;gap:6px;opacity:0;pointer-events:none;
-  transition:opacity .14s ease,transform .14s ease;
+  position:absolute;left:0;right:0;bottom:0;height:34px;
+  display:flex;opacity:0;pointer-events:none;
+  transition:opacity .14s ease;
 }
-.tile:hover .actions{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.tile:hover .actions,.tile.keep .actions,.tile.mark .actions{opacity:1;pointer-events:auto}
 .actions button{
-  border:none;border-radius:7px;padding:6px 13px;font-size:11.5px;font-weight:600;
-  background:rgba(10,12,15,.86);color:#e6e8eb;border:1px solid rgba(255,255,255,.18);
-  backdrop-filter:blur(6px);
+  flex:1;border:none;border-top:1px solid rgba(255,255,255,.14);
+  background:rgba(10,12,15,.78);color:#dfe3e8;
+  font:600 12px/1 inherit;letter-spacing:.02em;
+  backdrop-filter:blur(8px);transition:background .12s,color .12s;
 }
-.actions button:hover{border-color:currentColor}
+.actions button+button{border-left:1px solid rgba(255,255,255,.10)}
+.actions button:hover{background:rgba(10,12,15,.92)}
 .actions .aKeep:hover{color:var(--keep)}
 .actions .aMark:hover{color:var(--mark)}
-/* 已经标过的，按钮换成"取消" */
-.tile.keep .actions .aKeep,.tile.mark .actions .aMark{
-  background:rgba(10,12,15,.9);border-color:currentColor;
-}
-.tile.keep .actions .aKeep{color:var(--keep)}
-.tile.mark .actions .aMark{color:var(--mark)}
+/* 已经标在这张上，对应那一半点亮 */
+.tile.keep .aKeep{background:rgba(63,185,80,.22);color:var(--keep)}
+.tile.mark .aMark{background:rgba(227,179,65,.20);color:var(--mark)}
 
-/* 角标：只有标过的才有，形状是个小色块，不是文字 */
+/* 角标：圆形图标，不写字。和左侧列表里的 ✓ ✕ ★ 是同一套符号。 */
 .flag{
-  position:absolute;right:9px;top:9px;height:20px;min-width:20px;padding:0 7px;
-  border-radius:999px;display:none;align-items:center;justify-content:center;
-  font:600 10.5px/1 inherit;letter-spacing:.02em;
+  position:absolute;right:10px;top:10px;width:24px;height:24px;border-radius:50%;
+  display:none;align-items:center;justify-content:center;
+  font-size:13px;line-height:1;
+  box-shadow:0 2px 10px rgba(0,0,0,.55);
 }
 .tile.keep .flag{display:flex;background:var(--keep);color:var(--on-solid)}
 .tile.mark .flag{display:flex;background:var(--mark);color:var(--on-mark)}
@@ -286,10 +286,10 @@ function drawMulti() {
     t.dataset.id = p.id;
     t.style.background = grad(p);
     t.innerHTML = `<span>#${p.id}</span>
-      <span class="flag">${m === 'mark' ? '精选' : '留下'}</span>
+      <span class="flag">${m === 'mark' ? '★' : '✓'}</span>
       <span class="actions">
-        <button class="aKeep" data-act="keep">${m === 'keep' ? '取消' : '留下'}</button>
-        <button class="aMark" data-act="mark">${m === 'mark' ? '取消' : '精选'}</button>
+        <button class="aKeep" data-act="keep">${m === 'keep' ? '取消留下' : '留下'}</button>
+        <button class="aMark" data-act="mark">${m === 'mark' ? '取消精选' : '精选'}</button>
       </span>`;
     mBody.appendChild(t);
   });
@@ -444,7 +444,7 @@ if (location.hash.includes('multi')) setMode('multi');
 else { drawSingle(); drawHelp(); }
 if (location.hash.includes('hover')) {
   document.querySelectorAll('.tile').forEach((t, i) => {
-    if (i < 2) t.querySelector('.actions').style.cssText = 'opacity:1;transform:translate(-50%,0);pointer-events:auto';
+    if (i < 3) t.querySelector('.actions').style.cssText = 'opacity:1;pointer-events:auto';
   });
 }
 </script>
