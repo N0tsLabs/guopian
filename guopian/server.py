@@ -567,7 +567,12 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
         if not body.get("confirm"):
             return jsonify({"ok": False,
                             "error": "需要确认：这会清掉这个项目的全部决策"}), 409
-        return jsonify({"ok": True, "result": lib.store.reset_all()})
+        from . import decisions as dec_mod
+        # 方案 B：连文件一起搬回根目录，那才叫「回到最开始」。
+        res = dec_mod.restore_all(lib.store)
+        if not res.get("ok"):
+            return jsonify(res), 409
+        return jsonify({"ok": True, "result": res})
 
     @app.post("/api/undo")
     def undo():

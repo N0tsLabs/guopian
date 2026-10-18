@@ -250,3 +250,54 @@ def _write_xmp_rating(path: str, rating: int) -> None:
     ).format(r=rating, label="Red" if rating <= 1 else "Green")
     with open(sidecar, "w", encoding="utf-8") as f:
         f.write(xml)
+
+def restore_all(store: Store) -> dict:
+    """把归档出去的文件搬回库的根目录，并把所有判断清掉。
+
+    这是把 apply() 反过来做一次：当时按决定把照片分进了三个文件夹，
+    现在按路径把它们搬回来。只搬这三个文件夹里的，不碰别处。
+
+    重名不覆盖 —— 根目录已经有同名文件时跳过并记一条错误。
+    搬不回来的留在原处，对应的决定也不清（免得出现"数据库说没审过、
+    文件却还在归档文件夹里"这种更难查的状态）。
+    """
+    if store.get_meta("read_only"):
+        return {"ok": False, "error": "该库以只读方式打开，不会移动任何文件"}
+
+    root = _library_root(store)
+    folders = {config.dir_for(d): d for d in config.DECISIONS}
+    rows = store.conn.execute(
+        "SELECT id, path, rel_path, name, decision FROM photos ORDER BY id"
+    ).fetchall()
+
+    moved, errors, cleared = 0, [], 0
+    for r in rows:
+        rel = (r["rel_path"] or "").replace("\\", "/")
+        parts = rel.split("/")
+        top = parts[0] if len(parts) > 1 else ""
+        if top not in folders:
+            continue                      # 本来就在根目录，不用动
+        src = r["path"]
+        if not src or not os.path.exists(src):
+            errors.append("{}: 文件不在原处".format(r["name"]))
+            continue
+        dst = os.path.join(root, parts[-1])
+        if os.path.exists(dst):
+            errors.append("{}: 根目录已有同名文件，跳过".format(r["name"]))
+            continue
+        try:
+            shutil.move(src, dst)
+        except OSError as e:
+            errors.append("{}: {}".format(r["name"], e))
+            continue
+        new_rel = parts[-1]
+        store.conn.execute(
+            "UPDATE photos SET path=?, rel_path=? WHERE id=?",
+            (dst, new_rel, r["id"]))
+        moved += 1
+
+    store.conn.commit()
+
+    # 文件搬回来了才清判断；搬不回来的保持原样，免得状态自相矛盾。
+    cleared = store.reset_all()["cleared"]
+    return {"ok": True, "moved": moved, "cleared": cleared, "errors": errors}
