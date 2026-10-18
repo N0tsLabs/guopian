@@ -24,6 +24,7 @@
  * 所以用 configure() 注入，见文件末尾。 */
 
 import { G, Views } from './core.js';
+import { S } from './state.js';
 import { Settings } from './settings.js';
 import { Tour } from './tour.js';
 import { start, stop, attach, setLabels, configure, applyDefaults } from './app.js';
@@ -89,7 +90,7 @@ const Home = (() => {
     // home screen asks for a folder -- the first thing anyone meets should
     // explain what the app does, not demand they pick photos.
     if (!(data.recent || []).length && !data.current && !Tour.seen()) {
-      Tour.open({ withDemo: true, onExit: () => refresh() });
+      Tour.open({ hasLibrary: !!data.current, onExit: () => refresh() });
       return true;
     }
 
@@ -417,7 +418,12 @@ const Home = (() => {
     // #tour opens the walkthrough directly. Same reason as #settings: it
     // makes the screen linkable, and a headless browser can otherwise
     // never reach it.
-    if (/^#tour(-\d+)?$/.test(location.hash)) Tour.open({ withDemo: true });
+    if (/^#tour(-\d+)?$/.test(location.hash)) {
+      // 等状态到齐再开，否则会把「已打开的项目」误判成没开，
+      // 只讲首页那四步。
+      const go = () => Tour.open({ hasLibrary: !!(S.state && S.state.root) });
+      setTimeout(go, 1200);
+    }
 
     $('#clearRecent').onclick = async () => {
       const r = await api('/api/home');

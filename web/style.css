@@ -1651,12 +1651,8 @@ code{font:400 11.5px var(--mono);color:var(--ink-2);
    Rendered inside the overlay, from the real class names where they exist, so
    it looks like the app without being it. Nothing in here is focusable or
    clickable: the tour is a picture you can point at, not a sandbox. */
-.tourStage{
-  position:fixed;inset:0;z-index:0;
-  pointer-events:none;                 /* the whole replica is inert */
-  background:var(--bg);
-  font:13px/1.5 var(--ui);color:var(--ink);
-}
+/* 教程不再自己搭假界面：直接高亮真实元素，所以没有 tourStage。 */
+
 
 /* home screen replica */
 .tourHome{display:grid;grid-template-columns:300px minmax(0,1fr);height:100%}
