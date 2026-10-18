@@ -280,6 +280,10 @@ const Tour = (() => {
   }
 
   function open() {
+    // 一打开就记下「看过了」，不等关闭。
+    // 原来只在 close() 里写：只要 close 没跑到（刷新、误关窗口、脚本出错），
+    // 下次进首页又会重播一遍 —— 用户看到的就是「删了个项目又冒出新手教程」。
+    try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {}
     steps = buildSteps();
     $('#tourStage').dataset.screen = '';
     $('#tour').classList.remove('hidden');
