@@ -497,7 +497,7 @@ async function applyDialog() {
   // 它清的是决策，不动任何文件，而且整批可撤回。
   const resetBar = `
     <div class="undoBar resetBar">
-      <span>想从头再来：清掉这个项目的全部决策，照片一张都不动。</span>
+      <span>想从头再来：清掉全部判断，并把归档出去的照片搬回原目录。</span>
       <button class="btn ghost" id="apReset">重置全部决策</button>
     </div>`;
   el.sheet.innerHTML = `
@@ -540,8 +540,8 @@ async function applyDialog() {
       // ReferenceError，表现就是"按钮点了没反应"。
       const d = (S.state && S.state.counts && S.state.counts.decisions) || {};
       const n = (d.keep || 0) + (d.mark || 0) + (d.reject || 0);
-      // 二次确认：动全库的动作，点两次。
-      if (!window.confirm(`要把这个项目的 ${n} 张决策全部清掉吗？\n\n照片不会被移动或删除，只是回到"还没看过"的状态。\n这个操作不可撤销。`)) return;
+      // 二次确认：这个动作会搬文件，点两次。
+      if (!window.confirm(`要把这个项目整个重置吗？\n\n1. 清掉全部 ${n} 张判断\n2. 把已经归档到三个文件夹里的照片，全部搬回原目录\n\n照片不会被删除，只是回到最开始的未审状态。\n这个操作不可撤销。`)) return;
       const r = await api('/api/reset', { method: 'POST', body: JSON.stringify({ confirm: true }) });
       if (!r || !r.ok) { toast('重置失败：' + ((r && r.error) || ''), 'err'); return; }
       closeModal();
