@@ -73,8 +73,8 @@ button{font:inherit;color:inherit;cursor:pointer}
   transition:transform .12s ease,border-color .12s ease,opacity .12s ease;
 }
 .tile:hover{transform:translateY(-2px)}
-.tile.unmarked{opacity:.5}
-.tile.unmarked:hover{opacity:.82}
+.tile.unmarked{opacity:.86}
+.tile.unmarked:hover{opacity:1}
 .tile.keep{border-color:var(--keep);opacity:1}
 .tile.mark{border-color:var(--mark);opacity:1}
 .tile .tag{
@@ -86,18 +86,38 @@ button{font:inherit;color:inherit;cursor:pointer}
 .tile.keep .tag{background:var(--keep)}
 .tile.mark .tag{background:var(--mark);color:var(--on-mark)}
 
-/* 角上的 ✓ —— 只在悬停或已标记时出现 */
-.pick{
-  position:absolute;right:8px;top:8px;width:26px;height:26px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;
-  background:rgba(8,10,12,.72);border:1.5px solid rgba(255,255,255,.55);
-  color:transparent;font-size:14px;line-height:1;
-  opacity:0;transform:scale(.85);transition:all .13s ease;
+/* 悬停浮出的两个按钮。
+   不做「未标记 / 选中」这种文字标签 —— 状态靠边框和角标表达，
+   文字只用来说明"能做什么"，不用来描述"现在是什么"。 */
+.actions{
+  position:absolute;left:50%;bottom:10px;transform:translate(-50%,6px);
+  display:flex;gap:6px;opacity:0;pointer-events:none;
+  transition:opacity .14s ease,transform .14s ease;
 }
-.tile:hover .pick{opacity:1;transform:scale(1)}
-.tile.keep .pick,.tile.mark .pick{opacity:1;transform:scale(1)}
-.tile.keep .pick{background:var(--keep);border-color:var(--keep);color:var(--on-solid)}
-.tile.mark .pick{background:var(--mark);border-color:var(--mark);color:var(--on-mark)}
+.tile:hover .actions{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.actions button{
+  border:none;border-radius:7px;padding:6px 13px;font-size:11.5px;font-weight:600;
+  background:rgba(10,12,15,.86);color:#e6e8eb;border:1px solid rgba(255,255,255,.18);
+  backdrop-filter:blur(6px);
+}
+.actions button:hover{border-color:currentColor}
+.actions .aKeep:hover{color:var(--keep)}
+.actions .aMark:hover{color:var(--mark)}
+/* 已经标过的，按钮换成"取消" */
+.tile.keep .actions .aKeep,.tile.mark .actions .aMark{
+  background:rgba(10,12,15,.9);border-color:currentColor;
+}
+.tile.keep .actions .aKeep{color:var(--keep)}
+.tile.mark .actions .aMark{color:var(--mark)}
+
+/* 角标：只有标过的才有，形状是个小色块，不是文字 */
+.flag{
+  position:absolute;right:9px;top:9px;height:20px;min-width:20px;padding:0 7px;
+  border-radius:999px;display:none;align-items:center;justify-content:center;
+  font:600 10.5px/1 inherit;letter-spacing:.02em;
+}
+.tile.keep .flag{display:flex;background:var(--keep);color:var(--on-solid)}
+.tile.mark .flag{display:flex;background:var(--mark);color:var(--on-mark)}
 
 /* ── 放大层 ── */
 .zoom{
@@ -157,8 +177,8 @@ kbd{
 <!-- 多图 -->
 <div id="multi" class="hidden">
   <div class="mHead">
-    <span>一起决定 <b id="mCount">10</b> 张</span>
-    <span class="hint">点图片＝看 · 点角上的 ✓ ＝留下</span>
+    <span>一起决定 <b id="mCount">10</b> 张</span><span class="hint" id="mMarked">还没标</span>
+    <span class="hint">点图片＝看 · 悬停后点按钮标记</span>
     <span class="sp"></span>
     <button class="tab" id="mCancel">取消 (Esc)</button>
     <button class="tab" id="mCommit">提交 (Enter)</button>
@@ -266,9 +286,11 @@ function drawMulti() {
     t.dataset.id = p.id;
     t.style.background = grad(p);
     t.innerHTML = `<span>#${p.id}</span>
-      <span class="tag"></span>
-      <span class="pick">${m === 'mark' ? '★' : '✓'}</span>`;
-    t.querySelector('.tag').textContent = m === 'mark' ? '精选' : (m ? '留下' : '未标记');
+      <span class="flag">${m === 'mark' ? '精选' : '留下'}</span>
+      <span class="actions">
+        <button class="aKeep" data-act="keep">${m === 'keep' ? '取消' : '留下'}</button>
+        <button class="aMark" data-act="mark">${m === 'mark' ? '取消' : '精选'}</button>
+      </span>`;
     mBody.appendChild(t);
   });
   layout();
@@ -278,22 +300,28 @@ function drawMulti() {
 function updateMultiHead() {
   const kept = [...state.marks.values()].filter(Boolean).length;
   const marked = [...state.marks.values()].filter((v) => v === 'mark').length;
-  $('#mCount').textContent = photos.length - kept;
-  $('#mCommit').textContent = kept ? `提交：留 ${kept} 张 (Enter)` : `全部不过 (Enter)`;
+  // 头部只说事实：一共几张、已经标了几张。
+  // 之前这里显示的是「还没标几张」，看着像总数，很容易误解。
+  $('#mCount').textContent = photos.length;
+  $('#mMarked').textContent = kept ? `已标 ${kept} 张${marked ? `（含精选 ${marked}）` : ''}` : '还没标';
+  $('#mCommit').textContent = kept
+    ? `留下 ${kept} 张，其余 ${photos.length - kept} 张不过`
+    : `全部 ${photos.length} 张不过`;
 }
 
 mBody.addEventListener('click', (e) => {
   const tile = e.target.closest('.tile');
   if (!tile) return;
   const id = +tile.dataset.id;
-  if (e.target.closest('.pick')) {
+  const btn = e.target.closest('.actions button');
+  if (btn) {
+    const want = btn.dataset.act;
     const cur = state.marks.get(id);
-    const want = e.shiftKey ? 'mark' : 'keep';
     if (cur === want) state.marks.delete(id); else state.marks.set(id, want);
     drawMulti();
-  } else {
-    openZoom(id, 'multi');     // 点图片＝看
+    return;
   }
+  openZoom(id, 'multi');     // 点图片＝看，永远不改状态
 });
 
 /* ─────────────── 放大 ─────────────── */
@@ -366,7 +394,8 @@ addEventListener('keydown', (e) => {
     setMode('single');
     return;
   }
-  if (k === 'z' || k === 'Z') { e.preventDefault(); flash('把鼠标移到某张上再点它，就是放大'); }
+  // 多图里不做键盘决定：点图片是看，按钮是标。
+  // 只有 Enter / Esc 这两个收尾动作保留。
 });
 
 /* 拖拽（单图） */
@@ -406,12 +435,18 @@ $('#mCommit').onclick = () => { $('#mCommit').click(); };
 function drawHelp() {
   $('#foot').innerHTML = state.mode === 'single'
     ? `<kbd>←</kbd> 不过 <kbd>→</kbd> 要 <kbd>空格</kbd> 精选 <kbd>↑</kbd><kbd>↓</kbd> 翻看 <kbd>Z</kbd> 放大 · 也可以直接拖卡片`
-    : `<span>点图片＝<b>放大看</b></span><span>·</span><span>点角上的 <b>✓</b> ＝留下（Shift 点＝精选）</span><span>·</span><kbd>Enter</kbd> 提交 <kbd>Esc</kbd> 退出`;
+    : `<span>点图片＝<b>放大看</b></span><span>·</span><span>鼠标移上去，点 <b>留下</b> 或 <b>精选</b></span><span>·</span><span>没点过的就不过</span>`;
   $('#topHint').textContent = state.mode === 'single' ? '一张一张过' : '一组一起看';
 }
 
-drawSingle();
-drawHelp();
+// #multi 直接进多图，#hover 顺便把按钮显示出来（方便截图看样式）
+if (location.hash.includes('multi')) setMode('multi');
+else { drawSingle(); drawHelp(); }
+if (location.hash.includes('hover')) {
+  document.querySelectorAll('.tile').forEach((t, i) => {
+    if (i < 2) t.querySelector('.actions').style.cssText = 'opacity:1;transform:translate(-50%,0);pointer-events:auto';
+  });
+}
 </script>
 </body>
 </html>
