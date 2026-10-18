@@ -70,11 +70,16 @@ const DecideGrid = (() => {
       const t = e.target.closest('.dgTile');
       if (!t) return;
       const id = +t.dataset.id;
-      const i = ids.indexOf(id);
-      if (e.shiftKey) toggle(id, 'mark');
-      else toggle(id, 'keep');
-      focus = i;
-      paint();
+      const btn = e.target.closest('.dgActions button');
+      if (btn) {
+        // 按钮标记：点同一个第二次是取消
+        toggle(id, btn.dataset.act);
+        paint();
+        return;
+      }
+      // 点图片＝放大看，永远不改状态
+      focus = ids.indexOf(id);
+      openZoom();
     });
     root.addEventListener('mousemove', (e) => {
       const t = e.target.closest('.dgTile');
@@ -124,13 +129,10 @@ const DecideGrid = (() => {
     $('#dgCount', root).textContent = `${ids.length} 张`;
     tiles.forEach((el, id) => {
       const p = stateOf(id);
-      el.classList.toggle('picked', !!p);
-      el.classList.toggle('marked', p === 'mark');
-      el.classList.toggle('focused', ids.indexOf(id) === focus);
-      if (!p) el.classList.add('will-reject');
-      else el.classList.remove('will-reject');
-      const badge = el.querySelector('.dgBadge');
-      if (badge) badge.textContent = p === 'mark' ? '★' : (p ? '✓' : '');
+      el.classList.toggle('dgKeepOn', p === 'keep');
+      el.classList.toggle('dgMarkOn', p === 'mark');
+      const flag = el.querySelector('.dgFlag');
+      if (flag) flag.textContent = p === 'mark' ? '★' : (p ? '✓' : '');
     });
 
     const rest = ids.length - picks.length;
@@ -190,8 +192,11 @@ const DecideGrid = (() => {
       el.dataset.id = id;
       el.innerHTML = `
         <img src="/img/${id}/small" alt="" draggable="false">
-        <span class="dgBadge"></span>
-        <span class="dgName">${esc(c.name || '')}</span>`;
+        <span class="dgFlag"></span>
+        <span class="dgActions">
+          <button class="dgKeep" data-act="keep">留下</button>
+          <button class="dgMark" data-act="mark">精选</button>
+        </span>`;
       body.appendChild(el);
       tiles.set(id, el);
     });
@@ -332,16 +337,13 @@ function isZoomed() {
       if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       return true;
     };
+    if (k === 'z' || k === 'Z') { e.preventDefault(); openZoom(); return true; }
     if (k === 'ArrowLeft') { e.preventDefault(); return move(-1); }
     if (k === 'ArrowRight') { e.preventDefault(); return move(1); }
     if (k === 'ArrowUp') { e.preventDefault(); return move(-chooseLayout().cols); }
     if (k === 'ArrowDown') { e.preventDefault(); return move(chooseLayout().cols); }
-    if (k === 'k' || k === 'K') {
-      e.preventDefault(); toggle(ids[focus], 'keep'); paint(); return true;
-    }
-    if (k === 's' || k === 'S') {
-      e.preventDefault(); toggle(ids[focus], 'mark'); paint(); return true;
-    }
+    // 网格里不做键盘决定 —— 选了哪个就是哪个，不留"焦点在哪"的歧义。
+    // 只保留 Z 放大，放大层里再用键盘判。
     return false;
   }
 
