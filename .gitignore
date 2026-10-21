@@ -21,6 +21,10 @@ _guopian_rejected/
 catalogs/
 guopian.portable
 
+# 运行日志写在 user_data_dir() 里，不在仓库中。它会记下用户的真实目录路径
+# （D:\image cache\...），而仓库是公开的，所以绝不能提交。
+*.log
+
 # Local evaluation data - your own photos must never be committed
 evaluation/testset/
 evaluation/mytestset/
