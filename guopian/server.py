@@ -279,7 +279,9 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
         if err:
             return err
         from . import embed as embed_mod
+        from . import emotion as emo_mod
         ok, why = embed_mod.available()
+        emo_ok, emo_why = emo_mod.available()
         return jsonify({
             "root": lib.root,
             "slug": paths.slug(lib.root),
@@ -295,6 +297,14 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
                 "model_present": embed_mod.present(),
                 "covered": lib.store.vector_count(config.EMBED_MODEL),
                 "total": lib.counts()["total"],
+            },
+            "emotion": {
+                "ok": emo_ok,
+                "message": emo_why,
+                "model_present": emo_mod.present(),
+                "covered": lib.store.emotion_count(),
+                "faces": lib.store.conn.execute(
+                    "SELECT COUNT(*) FROM faces").fetchone()[0],
             },
             "calibration": lib.store.get_meta("calibration"),
             "issue_summary": _issue_summary(lib),
@@ -529,6 +539,22 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
         if lib.embedding():
             return jsonify({"ok": True, "started": False, "progress": lib.progress.snap()})
         return jsonify({"ok": True, "started": lib.start_embed(),
+                        "progress": lib.progress.snap()})
+
+    @app.post("/api/emotion")
+    def emotion_start():
+        """只补表情（幂等）。有模型才算，没模型直接说清楚缺什么。"""
+        lib, err = need_lib()
+        if err:
+            return err
+        from . import emotion as emo_mod
+        ok, why = emo_mod.available()
+        if not ok:
+            return jsonify({"ok": False, "error": why,
+                            "need_model": not emo_mod.present()})
+        if lib.emoting():
+            return jsonify({"ok": True, "started": False, "progress": lib.progress.snap()})
+        return jsonify({"ok": True, "started": lib.start_emotion(),
                         "progress": lib.progress.snap()})
 
     @app.get("/api/search")
@@ -856,7 +882,8 @@ def _build_cards(lib, ids: list[int]) -> list[dict]:
                       p.iso, p.shutter, p.aperture, p.focal,
                       p.pct_high, p.pct_low, p.lap_var_mp, p.noise, p.face_count,
                       p.group_id, p.group_size, p.group_rank, p.group_score,
-                      p.suggest, p.suggest_reason, p.suggest_conf, p.decision, p.error
+                      p.suggest, p.suggest_reason, p.suggest_conf, p.decision, p.error,
+                      p.face_valence, p.face_happy
                FROM photos p WHERE p.id=?""", (pid,)).fetchone()
         if row is None:
             continue
@@ -882,8 +909,27 @@ def _build_cards(lib, ids: list[int]) -> list[dict]:
         "SELECT DISTINCT group_id FROM photos WHERE group_size > 1 "
         "AND group_id IS NOT NULL ORDER BY group_id").fetchall()
     colours = {r[0]: i % GROUP_PALETTE for i, r in enumerate(palette)}
+
+    # 每个组里表情最好的是哪一张。一条聚合查询，免得给 photos 再加一列。
+    # 只在多张的组里算：单张没有"组内最好"可言。
+    #
+    # 闭眼的那几张要排除掉 —— 实测有张照片眼睛闭合（fatal）却效价最高，
+    # 因为闭眼瞬间常常正是在笑。标它"本组表情最好"等于在推荐一张废片。
+    shut = {r[0] for r in lib.store.conn.execute(
+        "SELECT DISTINCT photo_id FROM issues WHERE kind IN "
+        "('eye_closed','eye_maybe_closed')")}
+    best_emo = {}
+    for gid, pid, fv in lib.store.conn.execute(
+            "SELECT group_id, id, face_valence FROM photos WHERE group_size > 1 "
+            "AND group_id IS NOT NULL AND face_valence IS NOT NULL"):
+        if pid in shut:
+            continue
+        if gid not in best_emo or fv > best_emo[gid][1]:
+            best_emo[gid] = (pid, fv)
     for card in cards:
         card["group_color"] = colours.get(card.get("group_id"))
+        pick = best_emo.get(card.get("group_id"))
+        card["emo_best"] = bool(pick and pick[0] == card.get("id"))
     return cards
 
 

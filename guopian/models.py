@@ -36,6 +36,12 @@ MODEL_URLS = {
         "https://github.com/N0tsLabs/guopian/releases/download/models-v1/"
         "clip_vision.onnx"
     ),
+    # 表情：MobileFaceNet 多任务（mbf_va_mtl），7.9 MB，AffectNet 训练。
+    # 一个模型同时给 8 类情绪和效价/唤醒；同上面一样，本地有就直接用。
+    "emotion.onnx": (
+        "https://github.com/N0tsLabs/guopian/releases/download/models-v1/"
+        "emotion.onnx"
+    ),
 }
 
 

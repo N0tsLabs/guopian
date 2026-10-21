@@ -38,6 +38,14 @@ EMBED_MODEL = "clip-vitb32-int8-v1"
 EMBED_BATCH = 8
 EMBED_EDGE = 1600          # encode the same preview the stage shows
 
+# 表情模型：MobileFaceNet 多任务，7.9 MB，112x112，CPU 上 3 ms 一张。
+# 算的是"这张脸长什么样"，和 CLIP 那套"这张图讲什么"是两回事。
+EMOTION_MODEL = os.path.join(MODEL_DIR, "emotion.onnx")
+EMOTION_MODEL_TAG = "mbf-va-mtl-v1"
+EMOTION_BATCH = 16
+# 一张脸多小就不判表情了。和评眼睛的阈值同源：脸太小，什么模型都只是猜。
+EMOTION_MIN_FACE_PX = 60
+
 # 分组（有画面向量时走这条路，见 group.build_groups_vec）
 #
 # 为什么和 pHash 那套参数不是一套：pHash 那套是并查集，靠"能借道"把照片串

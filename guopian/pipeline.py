@@ -20,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 
-from . import analyze, config, embed, faces, group, imageio, metrics
+from . import analyze, config, embed, emotion, faces, group, imageio, metrics
 from .store import Store
 
 
@@ -86,6 +86,7 @@ class Library:
         self._cancel = threading.Event()
         self._thread: threading.Thread | None = None
         self._embed_thread: threading.Thread | None = None
+        self._emo_thread: threading.Thread | None = None
 
     # -------------------------------------------------------------- scan
 
@@ -173,6 +174,65 @@ class Library:
         return len(pending)
 
     # -------------------------------------------------------------- stage 3
+
+    def emotion_pending(self, limit: int | None = None) -> int:
+        """给每张脸算表情（8 类 + 效价/唤醒）。
+
+        单独一遍，不塞进 analyze：那张表已经够宽了，而且表情换模型比换测光
+        算法频繁得多 —— 分开以后换模型只要重跑这一遍，不用重算模糊和曝光。
+
+        只读缓存的预览图，一张脸 3 ms。没有模型就安静跳过：表情是加分项，
+        不能因为它没下载就挡住看照片。
+        """
+        ok, why = emotion.available()
+        if not ok:
+            self.progress.update(phase="emotion-skip", message=why)
+            return 0
+
+        pending = self.store.emotion_pending(config.EMOTION_MODEL_TAG)
+        if limit:
+            pending = pending[:limit]
+        if not pending:
+            return 0
+
+        self.progress.update(phase="emotion", total=len(pending), done=0, ok=0, failed=0,
+                             started=time.time(), finished=0.0,
+                             message="判断表情…")
+        from PIL import Image
+
+        for n, row in enumerate(pending):
+            if self._cancel.is_set():
+                break
+            try:
+                p = self.thumbs.get_or_build(row["path"], row["size"],
+                                             row["mtime"], config.EMBED_EDGE)
+                im = Image.open(p)
+                faces = [f for f in self.store.face_rows(row["id"])
+                         if (f["face_px"] or 0) >= config.EMOTION_MIN_FACE_PX]
+                if faces:
+                    crops = [imageio.face_crop(im, f, 0.15) for f in faces]
+                    for f, res in zip(faces, emotion.predict(crops)):
+                        self.store.set_face_emotion(row["id"], f["idx"], res,
+                                                    config.EMOTION_MODEL_TAG)
+                    self.store.refresh_photo_emotion(row["id"])
+                    self.store.conn.commit()
+                with self.progress.lock:
+                    self.progress.done += 1
+                    self.progress.ok += 1
+                    self.progress.current = row["name"]
+                    if n % 8 == 0:
+                        self.progress.message = "判断表情 {}/{}".format(n + 1, len(pending))
+            except Exception as e:
+                try:
+                    self.store.conn.rollback()
+                except Exception:
+                    pass
+                with self.progress.lock:
+                    self.progress.done += 1
+                    self.progress.failed += 1
+                    self.progress.message = "表情失败 {}：{}".format(row["name"], e)
+        self.progress.update(message="表情计算完成，{} 张照片".format(self.progress.ok))
+        return self.progress.ok
 
     def embed_pending(self, limit: int | None = None) -> int:
         """算每张照片的画面向量（语义搜索 + 相似分组的原料）。
@@ -354,6 +414,10 @@ class Library:
                 self.progress.update(phase="cancelled", message="已取消")
                 return
 
+            # 表情要排在 recompute 之前：组内排名会用到它（group._WEIGHTS）。
+            # 它只读预览图，比分析快两个数量级，1428 张里 969 张有脸、约 4 秒。
+            self.emotion_pending()
+
             # 先算画面向量，再算分组：分组要用它们（见 recompute）。
             # 没有模型时这一步立刻返回 0，不会拖慢打开库。
             self.embed_pending()
@@ -378,6 +442,32 @@ class Library:
     def embedding(self) -> bool:
         """向量化那一遍还在跑吗。"""
         return bool(self._embed_thread and self._embed_thread.is_alive())
+
+    def emoting(self) -> bool:
+        return bool(self._emo_thread and self._emo_thread.is_alive())
+
+    def start_emotion(self) -> bool:
+        """只补表情，不重跑分析。换了模型或刚下完模型时用。"""
+        if self.emoting():
+            return False
+        self._cancel.clear()
+        self._emo_thread = threading.Thread(target=self._emotion_only, daemon=True)
+        self._emo_thread.start()
+        return True
+
+    def _emotion_only(self):
+        """补完表情要顺手重算一遍排名，否则界面上的"组内第几"还是旧的。"""
+        t0 = time.time()
+        try:
+            n = self.emotion_pending()
+            if n:
+                self.recompute()
+            self.progress.update(phase="done", finished=time.time(),
+                                 message="表情计算完成 · {} 张 · {:.0f} 秒".format(
+                                     n, time.time() - t0))
+        except Exception as e:
+            self.progress.update(phase="error",
+                                 message="{}: {}".format(type(e).__name__, e))
 
     def start_embed(self) -> bool:
         """只补向量，不重跑分析。
@@ -420,3 +510,5 @@ class Library:
             "SELECT COUNT(*) n FROM photos WHERE analysis_version>=?",
             (config.ANALYSIS_VERSION,)).fetchone()["n"]
         return {"total": total, "analyzed": analyzed, "decisions": c}
+
+

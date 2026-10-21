@@ -240,6 +240,10 @@ function renderMeta(c) {
   // Where this frame sits in its own burst, and how long since the previous
   // one -- a 20-minute jump is a different scene, not another take.
   if (c.group_size > 1) bits.push(`连拍 ${c.group_rank}/${c.group_size}`);
+  // 表情只在有脸的照片上有；写"最好"而不是"差"，因为绝对好坏判断不可信
+  // （AffectNet 8 类准确率 61%），组内比较才是这个信号的正确用法。
+  if (c.emo_best && c.group_size > 1) bits.push('本组表情最好');
+  else if (c.face_happy != null && c.face_happy >= 0.5) bits.push('笑');
   const prev = S.queue[S.idx - 1];
   if (prev && prev.taken_ts && c.taken_ts) {
     const dt = c.taken_ts - prev.taken_ts;

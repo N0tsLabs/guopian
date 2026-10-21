@@ -254,6 +254,13 @@ def score_components(row: dict, fcs: list[dict]) -> dict[str, float]:
         comp["face_sharp"] = max(ratios)
     if fcs:
         comp["smile"] = max((f.get("smile") or 0.0) for f in fcs)
+
+    # 表情模型给的效价（-1..1 -> 0..1）。和 smile blendshape 是两路信号：
+    # smile 量的是"嘴角动了多少"，效价是"这张脸整体的情绪有多正面"。
+    # 单看一边都会漏 —— 有人在笑但眼睛没笑，笑容分数很高、效价一般。
+    fv = row.get("face_valence")
+    if fv is not None:
+        comp["emotion"] = (float(fv) + 1.0) / 2.0
     return comp
 
 
@@ -264,7 +271,10 @@ _WEIGHTS = {
     "clean": 0.08,
     "face_sharp": 0.10,
     "gaze": 0.08,
-    "smile": 0.07,
+    "smile": 0.05,
+    # 表情放在和"眼睛"同一量级：一张连拍里，脸糊一点通常还能忍，表情垮了就废了。
+    # 但它只在有脸的照片上参与，权重按实际存在的项归一化，所以没脸的照片不受影响。
+    "emotion": 0.12,
 }
 
 
@@ -290,11 +300,26 @@ def rank_groups(rows: list[dict], face_index: dict[int, list[dict]],
         members = g["members"]
         comps = [score_components(by_id.get(m, {}), face_index.get(m, [])) for m in members]
 
+        # 组里有的照片有脸、有的没脸时，表情这一项不能"缺了就免考"。
+        # _weighted 是按"实际存在的项"归一化的，所以没脸的那张会因为少一项
+        # 而分数被抬高 —— 实测有一组的"组内最佳"因此跳到一张没脸的照片上。
+        # 缺的那几张贴组内均值：连拍里同一个人同一束光，均值是比"未知"更好的猜测。
+        present = [c["emotion"] for c in comps if "emotion" in c]
+        if present and len(present) < len(comps):
+            mean = sum(present) / len(present)
+            for c in comps:
+                c.setdefault("emotion", mean)
+
         # Inside one burst the absolute sharpness number is meaningless on its
         # own -- what matters is which frame is sharpest. Replace it with the
         # in-group rank.
+        #
+        # 表情也归到这一类，而且只能这样用：AffectNet 8 类的公开准确率是
+        # 61%-63%，拿绝对效价去判"这张表情差"会错得很离谱；但同一个连拍里
+        # 同一个人、同一束光，谁比谁好就要稳得多。所以组内比较用排名，
+        # 不拿分数当绝对评价。
         if len(members) >= 3:
-            for key in ("sharp", "face_sharp"):
+            for key in ("sharp", "face_sharp", "emotion"):
                 vals = [c.get(key) for c in comps]
                 if sum(v is not None for v in vals) >= 2:
                     ranks = _rank_normalise(vals)

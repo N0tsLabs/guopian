@@ -17,9 +17,16 @@ from . import config, paths
 # catalog can be upgraded in place rather than thrown away and re-analysed.
 _ADDED_PHOTO_COLUMNS = (
     ("cast_r", "REAL"), ("cast_b", "REAL"),
+    # 一张照片里最"正面"的那张脸，和"有人在笑吗"。组内排名用它们。
+    ("face_valence", "REAL"), ("face_happy", "REAL"),
 )
 _ADDED_FACE_COLUMNS = (
     ("face_median", "REAL"), ("catch_l", "REAL"), ("catch_r", "REAL"),
+    # 表情（emotion.py 单独一遍算的，不在 analyze 里）：
+    # valence/arousal 是连续值，emo 是 8 类概率的 JSON。分开存是为了能在 SQL 里
+    # 直接按 valence 排序、统计，不用把 JSON 拖出来解析。
+    ("valence", "REAL"), ("arousal", "REAL"), ("emo", "TEXT"),
+    ("emo_model", "TEXT"),
 )
 
 # The face row is wide and has grown twice. Building the statement from the
@@ -508,6 +515,42 @@ class Store:
             return self.conn.execute("SELECT COUNT(*) FROM photo_vec WHERE model=?",
                                      (model,)).fetchone()[0]
         return self.conn.execute("SELECT COUNT(*) FROM photo_vec").fetchone()[0]
+
+    # -- 表情 -------------------------------------------------------------
+    def set_face_emotion(self, photo_id: int, idx: int, emo: dict, model: str):
+        self.conn.execute(
+            "UPDATE faces SET valence=?, arousal=?, emo=?, emo_model=? "
+            "WHERE photo_id=? AND idx=?",
+            (emo.get("valence"), emo.get("arousal"),
+             json.dumps(emo.get("probs"), ensure_ascii=False), model,
+             photo_id, idx))
+
+    def refresh_photo_emotion(self, photo_id: int):
+        """把一张照片里各张脸汇总到 photos 一行。
+
+        取 max 而不是 avg：一张合影里只要有一个人在对镜头笑，这张照片的
+        "表情价值"就成立了，被背景里路过的人拉低没有意义。
+        """
+        r = self.conn.execute(
+            "SELECT MAX(valence) v, MAX(json_extract(emo, '$.happiness')) h "
+            "FROM faces WHERE photo_id=? AND emo IS NOT NULL", (photo_id,)).fetchone()
+        self.conn.execute("UPDATE photos SET face_valence=?, face_happy=? WHERE id=?",
+                          (r["v"] if r else None, r["h"] if r else None, photo_id))
+
+    def emotion_pending(self, model: str) -> list[dict]:
+        """有脸、但还没算过表情的照片（按 id 排，批处理才稳）。"""
+        return [dict(r) for r in self.conn.execute(
+            """SELECT DISTINCT p.* FROM photos p JOIN faces f ON f.photo_id = p.id
+               WHERE f.emo IS NULL OR f.emo_model <> ? ORDER BY p.id""", (model,))]
+
+    def emotion_count(self) -> int:
+        return self.conn.execute(
+            "SELECT COUNT(*) FROM faces WHERE emo IS NOT NULL").fetchone()[0]
+
+    def face_rows(self, photo_id: int) -> list[dict]:
+        return [dict(r) for r in self.conn.execute(
+            "SELECT idx, x, y, w, h, face_px FROM faces WHERE photo_id=? ORDER BY idx",
+            (photo_id,))]
 
     # -- decisions --------------------------------------------------------
     def set_decision(self, photo_id: int, action: str, batch: str | None = None):
