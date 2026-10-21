@@ -17,7 +17,7 @@
  * 从 web/app.js 逐行切出（内容一字未改，只剥掉闭包的两层缩进）。 */
 
 import { el, S, V, cur, LABEL, VERDICT, OWNED } from './state.js';
-import { $, api, esc } from './core.js';
+import { $, api, esc, imgUrl } from './core.js';
 import { fitStage, centred, updateZoomBadge } from './view.js';
 import { drawHistogram, renderOverlay, buildZebra } from './histogram.js';
 import { highlightCurrent, savePos } from './list.js';
@@ -85,7 +85,7 @@ function render() {
     // every cold load and only appeared when the file was already cached.
     drawHistogram();
   };
-  el.photo.src = `/img/${c.id}/card`;
+  el.photo.src = imgUrl(c.id, 'card');
 
   // The full-resolution layer is rebuilt for every photo.
   el.photoHD.classList.add('hidden');
@@ -195,7 +195,7 @@ function prefetchAhead() {
     if (!it) continue;
     const im = new Image();
     im.decoding = 'async';
-    im.src = `/img/${it.id}/card`;
+    im.src = imgUrl(it.id, 'card');
     _prefetch.push(im);
   }
 }
@@ -293,7 +293,7 @@ function loadFullRes(c) {
     if (S.showZebra) buildZebra();
   };
   im.onerror = () => { V.fullReady = false; };
-  im.src = `/img/${id}/full`;
+  im.src = imgUrl(id, 'full');
 }
 
 /* ───────────────────── 注入：清掉上一次按住预览的残留 ─────────────────────

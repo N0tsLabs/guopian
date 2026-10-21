@@ -21,7 +21,7 @@ import { S } from './state.js';
 import { computeGridLayout, GAP } from './gridlayout.js';
 
 const DecideGrid = (() => {
-  const { $, esc, api, toast } = G;
+  const { $, esc, api, toast, imgUrl } = G;
 
   let root = null;
   let zoomEl = null;
@@ -191,7 +191,7 @@ const DecideGrid = (() => {
       el.className = 'dgTile';
       el.dataset.id = id;
       el.innerHTML = `
-        <img src="/img/${id}/small" alt="" draggable="false">
+        <img src="${imgUrl(id, 'small')}" alt="" draggable="false">
         <span class="dgFlag"></span>
         <span class="dgActions">
           <button class="dgKeep" data-act="keep">留下</button>
@@ -272,7 +272,7 @@ function paintZoom() {
   const id = ids[focus];
   if (id == null) return;
   const img = zoomEl.querySelector('img');
-  img.src = '/img/' + id + '/card';
+  img.src = imgUrl(id, 'card');
   const p = stateOf(id);
   const badge = zoomEl.querySelector('.dgZoomBadge');
   badge.textContent = p === 'mark' ? '★ 精选' : (p === 'keep' ? '✓ 留下' : '');

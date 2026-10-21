@@ -103,10 +103,18 @@ if first:
         first.get("group_rank"), first.get("group_size")))
 
 print("\n== 7. 图片服务 ==")
+# The slug is part of the path on purpose: photo ids restart at 1 in every
+# library, and the thumbnails are cached for 30 days, so a slug-less URL makes
+# the browser show the previous project's picture under this project's id.
+SLUG = s.get("slug") if s else None
+fails += show("/api/state 带 slug", bool(SLUG), str(SLUG))
 for size in ("small", "card"):
-    st, blob = call("/img/{}/{}".format(first["id"], size), raw=True)
-    fails += show("GET /img/{}/{}".format(first["id"], size),
-                  st == 200 and len(blob) > 1000, "{} bytes".format(len(blob)))
+    path = "/img/{}/{}/{}".format(SLUG, first["id"], size)
+    st, blob = call(path, raw=True)
+    fails += show("GET " + path, st == 200 and len(blob) > 1000, "{} bytes".format(len(blob)))
+# A slug that is not this library must not be answered with this library's photo.
+st, _blob = call("/img/some-other-shoot-0000000000/{}/small".format(first["id"]), raw=True)
+fails += show("错的 slug 会 404", st == 404, "HTTP {}".format(st))
 
 print("\n== 8. 人脸 + 详情 ==")
 st, ph = call("/api/photo/{}".format(first["id"]))

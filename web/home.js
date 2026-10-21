@@ -23,7 +23,7 @@
  * 反向那条线（app.js 需要"库被关掉时回首页"）不能 import 回来，会成环，
  * 所以用 configure() 注入，见文件末尾。 */
 
-import { G, Views } from './core.js';
+import { G, Views, setLibSlug } from './core.js';
 import { S } from './state.js';
 import { Settings } from './settings.js';
 import { Tour } from './tour.js';
@@ -268,6 +268,10 @@ const Home = (() => {
     try {
       const r = await api('/api/open', { method: 'POST', body: JSON.stringify(body) });
       if (!r.ok) { toast(r.error || '打开失败', 'err'); return; }
+      // Tell imgUrl() which library it is before anything renders: photo ids
+      // restart at 1 in every project, so a slug-less URL would be served from
+      // the previous project's cache (see core.js).
+      setLibSlug(r.slug);
       $('#toast').classList.add('hidden');
       // The address bar becomes the project, so a reload lands back here rather
       // than on the home screen. replaceState when the URL already names this

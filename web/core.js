@@ -48,7 +48,25 @@ const G = (() => {
     return n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n);
   }
 
-  return { $, $$, api, toast, esc, sleep, fmtCount };
+  /* 图片地址里必须带上「哪个库」。
+
+     照片 id 在每个库里都从 1 开始，所以 /img/3/card 的意思永远是「第 3 张」，
+     而响应又带着 max-age=30 天 —— 换项目以后浏览器直接把上一个项目的第 3 张
+     拿了出来：左边缩略图是一个拍摄，右边大图是另一个。实测过：清掉查询串再
+     取同一批 id，八张全都和服务器给的不一样。
+
+     所以 slug 进路径。换项目 = 换 URL = 换缓存条目，浏览器不可能再串。
+     代价是调用点都得多一个参数，用 imgUrl() 收口就是为了只有一个地方拼它。 */
+  let LIB_SLUG = '';
+
+  function setLibSlug(slug) { LIB_SLUG = slug || ''; }
+
+  function imgUrl(id, size) {
+    if (!LIB_SLUG) throw new Error('imgUrl 调用时还不知道是哪个库');
+    return '/img/' + encodeURIComponent(LIB_SLUG) + '/' + id + '/' + size;
+  }
+
+  return { $, $$, api, toast, esc, sleep, fmtCount, setLibSlug, imgUrl };
 })();
 
 /* 除了 G 这个命名空间，还把这七个帮手单独导出。
@@ -57,7 +75,7 @@ const G = (() => {
    `import { G } from './core.js'` 再在函数体里 `const { esc } = G`，
    依赖关系被拆成两处；写 `import { esc } from './core.js'` 时，
    文件头那一行就完整说明了"这个模块用到 core 的哪一样"。 */
-const { $, $$, api, toast, esc, sleep, fmtCount } = G;
+const { $, $$, api, toast, esc, sleep, fmtCount, setLibSlug, imgUrl } = G;
 
 /* ═══════════════════════════════ 视图切换 ═══════════════════════════════ */
 
@@ -69,4 +87,4 @@ const Views = {
   },
 };
 
-export { G, Views, $, $$, api, toast, esc, sleep, fmtCount };
+export { G, Views, $, $$, api, toast, esc, sleep, fmtCount, setLibSlug, imgUrl };

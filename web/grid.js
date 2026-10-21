@@ -15,7 +15,7 @@
  * 从 web/app.js 逐行切出（内容一字未改，只剥掉闭包的两层缩进）。 */
 
 import { el, S, LABEL } from './state.js';
-import { $, api, toast, esc } from './core.js';
+import { $, api, toast, esc, imgUrl } from './core.js';
 import { fitStage } from './view.js';
 import { render } from './card.js';
 
@@ -45,7 +45,7 @@ async function loadGrid() {
     const flags = (c.issues || []).slice(0, 3).map(i =>
       `<span class="flag ${i.severity}">${esc(i.label_zh)}</span>`).join('');
     return `<div class="cell ${c.decision || ''}" data-id="${c.id}">
-      <img loading="lazy" src="/img/${c.id}/small" alt="">
+      <img loading="lazy" src="${imgUrl(c.id, 'small')}" alt="">
       <div class="flags">${flags}</div>
       ${c.group_size > 1 ? `<div class="gmark">${c.group_rank}/${c.group_size}</div>` : ''}
       <div class="cap">${esc(c.name)}</div>

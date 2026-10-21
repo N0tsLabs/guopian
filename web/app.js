@@ -32,7 +32,7 @@
  *
  * 从 web/app.js 逐行切出（内容一字未改，只剥掉闭包的两层缩进）。 */
 
-import { $, $$, api, toast, esc, Views } from './core.js';
+import { $, $$, api, toast, esc, Views, imgUrl, setLibSlug } from './core.js';
 import { el, S, V, cur, LABEL, VERDICT, OWNED, HOLD_CLASS, RELEASE_CLASS } from './state.js';
 import { fitStage, layerTransform, setCardOffset, onWheel, onDblClick,
          configure as configureView } from './view.js';
@@ -189,6 +189,9 @@ async function loadState() {
     return;
   }
   S.state = st;
+  // 图片地址要带库的身份，否则换项目后浏览器会拿上一个项目的缓存（见 core.js）。
+  // 放在这里是因为 loadState 一定先于 loadQueue / render 跑完。
+  setLibSlug(st.slug);
   if (S.generation !== -1 && st.generation !== S.generation) loadQueue();
   S.generation = st.generation;
 
@@ -601,7 +604,7 @@ async function applyDialog() {
     <p class="muted small">共约 ${pv.total_mb} MB</p>
     <p class="muted small" style="margin-top:12px">扫一眼下面这些照片，确认没有误判：</p>
     <div class="applyGrid">
-      ${pv.items.map(i => `<img loading="lazy" src="/img/${i.id}/small" class="d-${i.decision}" title="${esc(i.rel_path)}">`).join('')}
+      ${pv.items.map(i => `<img loading="lazy" src="${imgUrl(i.id, 'small')}" class="d-${i.decision}" title="${esc(i.rel_path)}">`).join('')}
     </div>
     ${pv.truncated ? `<p class="muted small">…还有 ${pv.truncated} 张未显示</p>` : ''}
     ${ro ? `<p class="muted small" style="color:#e3b341">本库以只读方式打开，不会移动文件。</p>` : ''}

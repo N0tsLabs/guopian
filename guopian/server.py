@@ -99,6 +99,20 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
     app.config["GUOPIAN_DEV"] = bool(dev)
     web_dir = config.WEB_DIR
 
+    @app.after_request
+    def _no_store_api(resp):
+        """JSON answers describe the *currently open* library, and every library
+        starts its photo ids at 1. `/api/queue?filter=all` therefore means
+        something different after a project switch while its URL stays the same;
+        Flask sends no Cache-Control and no validator here, so nothing stops a
+        browser from reusing the old body. The app already has one measured bug
+        of exactly this shape -- the thumbnails (see image()). Refuse to cache
+        these instead of trusting heuristic freshness.
+        """
+        if request.path.startswith("/api/"):
+            resp.headers["Cache-Control"] = "no-store"
+        return resp
+
     def need_lib():
         """(library, error_response). Every library endpoint goes through this."""
         lib = sess.require()
@@ -174,6 +188,7 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
         if lib is not None:
             state = {
                 "root": lib.root,
+                "slug": paths.slug(lib.root),
                 "work_dir": lib.work_dir,
                 "read_only": bool(lib.read_only),
                 "counts": lib.counts(),
@@ -207,6 +222,7 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
             return jsonify({"ok": False, "error": "{}: {}".format(type(e).__name__, e)}), 500
         return jsonify({"ok": True, "generation": sess.generation,
                         "root": lib.root, "work_dir": lib.work_dir,
+                        "slug": paths.slug(lib.root),
                         "read_only": bool(lib.read_only)})
 
     @app.post("/api/close")
@@ -263,6 +279,7 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
             return err
         return jsonify({
             "root": lib.root,
+            "slug": paths.slug(lib.root),
             "work_dir": lib.work_dir,
             "read_only": bool(lib.read_only),
             "generation": sess.generation,
@@ -393,9 +410,21 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
             return ("", 404)
         return send_file(p, mimetype="image/jpeg", max_age=86400)
 
-    @app.get("/img/<int:pid>/<size>")
-    def image(pid, size):
+    @app.get("/img/<slug>/<int:pid>/<size>")
+    def image(slug, pid, size):
         """small = list thumbnail, card = instant preview, full = the real thing.
+
+        `<slug>` is the library's identity, and it is part of the URL for one
+        reason: photo ids restart at 1 in every library. Without it, `/img/3/card`
+        means "the third photo" forever and the browser happily serves the copy
+        it cached for the *previous* project -- the left thumbnails then show one
+        shoot while the big picture shows another. Measured, not theorised: with
+        `Cache-Control: max-age=2592000` and a slug-less URL, every one of the
+        first eight ids came back from cache with a different picture than the
+        server's.
+
+        A slug that no longer matches the open library is a 404 rather than a
+        guess: a stale page should show a hole, never somebody else's photo.
 
         For a format the browser renders natively, `full` is the ORIGINAL file
         -- not a re-encode. Guopian is local-first: there is no bandwidth to
@@ -406,6 +435,8 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
         lib, err = need_lib()
         if err:
             return err
+        if slug != paths.slug(lib.root):
+            return ("not found", 404)
         row = lib.store.conn.execute(
             "SELECT path, size, mtime, ext, width, height FROM photos WHERE id=?",
             (pid,)).fetchone()

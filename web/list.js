@@ -15,7 +15,7 @@
  * 从 web/app.js 逐行切出（内容一字未改，只剥掉闭包的两层缩进）。 */
 
 import { el, S, LABEL } from './state.js';
-import { esc, $$ } from './core.js';
+import { esc, $$, imgUrl } from './core.js';
 
 /* ── where to put the cursor when a list loads ──
    Reopening a project should land you back where you were, not at the top.
@@ -102,7 +102,7 @@ function itemHTML(c, i, shown, endsGroup) {
   return `<button class="listItem ${cls}" data-i="${i}" data-id="${c.id}">
     <span class="bar"></span>
     <span class="thumbWrap">
-      <img data-src="/img/${c.id}/small" alt="">
+      <img data-src="${imgUrl(c.id, 'small')}" alt="">
       <span class="num">${shown == null ? i + 1 : shown}</span>
     </span>
     <span class="info">
