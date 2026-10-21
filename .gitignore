@@ -15,7 +15,9 @@ release/
 
 # Guopian runtime data
 .cache/
-models/*.task
+# 模型是第三方二进制，不进仓库：按需下载（models.ensure），
+# 而且 CLIP 的 ViT-B-32 单文件就 338 MB。
+models/
 .guopian/
 _guopian_rejected/
 catalogs/
