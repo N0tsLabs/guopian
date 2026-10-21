@@ -9,6 +9,8 @@ import threading
 import time
 from typing import Any, Iterable
 
+import numpy as np
+
 from . import config, paths
 
 # Columns added after the first release. Kept as an explicit list so an older
@@ -196,6 +198,17 @@ CREATE TABLE IF NOT EXISTS apply_items (
 );
 
 CREATE INDEX IF NOT EXISTS idx_apply_items ON apply_items(batch);
+
+-- 画面向量：语义搜索和相似分组的原料。float16 存储，512 维 = 1 KB/张。
+-- model 记的是「哪个模型、哪个预处理版本」算出来的：换了模型以后旧向量不能
+-- 和新向量混着比，所以它参与身份，缺的会被重算。
+CREATE TABLE IF NOT EXISTS photo_vec (
+    photo_id INTEGER PRIMARY KEY,
+    dim      INTEGER NOT NULL,
+    model    TEXT NOT NULL,
+    vec      BLOB NOT NULL,
+    at       REAL NOT NULL
+);
 """
 
 
@@ -449,6 +462,47 @@ class Store:
             }
             out.setdefault(d["photo_id"], []).append(d)
         return out
+
+    # -- 画面向量（语义搜索 / 相似分组）-------------------------------------
+    def set_vector(self, photo_id: int, vec, model: str):
+        arr = np.asarray(vec, dtype=np.float16)
+        self.conn.execute(
+            "INSERT INTO photo_vec(photo_id, dim, model, vec, at) VALUES(?,?,?,?,?) "
+            "ON CONFLICT(photo_id) DO UPDATE SET dim=excluded.dim, model=excluded.model,"
+            " vec=excluded.vec, at=excluded.at",
+            (photo_id, int(arr.size), model, arr.tobytes(), time.time()))
+
+    def missing_vectors(self, model: str) -> list[dict]:
+        """照片里还没有当前模型向量的那些（按 id 排序，批处理才跑得稳）。"""
+        return [dict(r) for r in self.conn.execute(
+            "SELECT p.* FROM photos p LEFT JOIN photo_vec v ON v.photo_id = p.id "
+            "WHERE v.photo_id IS NULL OR v.model <> ? ORDER BY p.id", (model,))]
+
+    def load_vectors(self, model: str | None = None) -> tuple[list[int], "np.ndarray"]:
+        """(photo_ids, N x dim float32)。model 给了就只取那个模型的。"""
+        sql = "SELECT photo_id, dim, vec FROM photo_vec"
+        args: tuple = ()
+        if model:
+            sql += " WHERE model = ?"
+            args = (model,)
+        sql += " ORDER BY photo_id"
+        ids: list[int] = []
+        rows: list[np.ndarray] = []
+        dim = 0
+        for r in self.conn.execute(sql, args):
+            v = np.frombuffer(r["vec"], dtype=np.float16).astype(np.float32)
+            dim = dim or int(r["dim"])
+            ids.append(int(r["photo_id"]))
+            rows.append(v)
+        if not rows:
+            return [], np.zeros((0, dim or 512), dtype=np.float32)
+        return ids, np.vstack(rows)
+
+    def vector_count(self, model: str | None = None) -> int:
+        if model:
+            return self.conn.execute("SELECT COUNT(*) FROM photo_vec WHERE model=?",
+                                     (model,)).fetchone()[0]
+        return self.conn.execute("SELECT COUNT(*) FROM photo_vec").fetchone()[0]
 
     # -- decisions --------------------------------------------------------
     def set_decision(self, photo_id: int, action: str, batch: str | None = None):

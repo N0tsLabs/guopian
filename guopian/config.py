@@ -26,6 +26,18 @@ WEB_DIR = os.path.join(ROOT_DIR, "web")
 MODEL_DIR = os.path.join(ROOT_DIR, "models")
 FACE_MODEL = os.path.join(MODEL_DIR, "face_landmarker.task")
 
+# CLIP's vision tower, exported to ONNX and quantised on the way out: 96 MB
+# instead of 352 MB, and no torch at runtime. Only the visual half ships --
+# the scene words are a fixed vocabulary whose vectors are precomputed
+# (guopian/data/tag_vecs.npy), so the text tower is not needed in the app.
+SCENE_MODEL = os.path.join(MODEL_DIR, "clip_vision.onnx")
+# Bumped whenever the exported graph or its preprocessing changes: it is part of
+# the identity of a stored vector, so old vectors get recomputed rather than
+# silently mixed with new ones.
+EMBED_MODEL = "clip-vitb32-int8-v1"
+EMBED_BATCH = 8
+EMBED_EDGE = 1600          # encode the same preview the stage shows
+
 # Per-library working data lives in <library>/.guopian/
 WORK_DIR_NAME = ".guopian"
 TRASH_DIR_NAME = "_guopian_rejected"

@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 import sys
 
+import numpy as np
 from flask import Flask, jsonify, request, send_file, send_from_directory
 
 from . import config, decisions, imageio, paths, session as session_mod
@@ -277,6 +278,8 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
         lib, err = need_lib()
         if err:
             return err
+        from . import embed as embed_mod
+        ok, why = embed_mod.available()
         return jsonify({
             "root": lib.root,
             "slug": paths.slug(lib.root),
@@ -286,6 +289,13 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
             "progress": lib.progress.snap(),
             "counts": lib.counts(),
             "face_available": _faces_ok(),
+            "scene": {
+                "ok": ok,
+                "message": why,
+                "model_present": embed_mod.present(),
+                "covered": lib.store.vector_count(config.EMBED_MODEL),
+                "total": lib.counts()["total"],
+            },
             "calibration": lib.store.get_meta("calibration"),
             "issue_summary": _issue_summary(lib),
             "labels": _labels(),
@@ -495,46 +505,88 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
         flt = request.args.get("filter", "all")
         sort = request.args.get("sort", "time")
         ids = _select_ids(lib, flt, sort)
-        cards = []
-        for pid in ids:
-            row = lib.store.conn.execute(
-                """SELECT p.id, p.name, p.rel_path, p.taken_at, p.taken_ts,
-                          p.camera, p.lens, p.width, p.height,
-                          p.iso, p.shutter, p.aperture, p.focal,
-                          p.pct_high, p.pct_low, p.lap_var_mp, p.noise, p.face_count,
-                          p.group_id, p.group_size, p.group_rank, p.group_score,
-                          p.suggest, p.suggest_reason, p.suggest_conf, p.decision, p.error
-                   FROM photos p WHERE p.id=?""", (pid,)).fetchone()
-            if row is None:
-                continue
-            card = dict(row)
-            card["issues"] = [_row_to_card(r) for r in lib.store.conn.execute(
-                "SELECT kind, severity, confidence, face_idx, label_zh, detail, evidence "
-                "FROM issues WHERE photo_id=? ORDER BY CASE severity "
-                "WHEN 'fatal' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 "
-                "WHEN 'low' THEN 3 ELSE 4 END", (pid,)).fetchall()]
-            cards.append(card)
-
-        # A colour index per similar group.
-        #
-        # This used to be group_id % 8 computed in the browser, which cannot
-        # work: this library has 66 groups, so with 8 colours two unrelated
-        # groups always share one and the colour stops telling them apart.
-        # The index is a group's ORDINAL among the multi-photo groups -- only
-        # 16 of those -- not a hash of its id.
-        #
-        # Computed here rather than in the list because the list is filtered:
-        # ranking groups within the current view would make a group change
-        # colour when the user switched filters.
-        palette = lib.store.conn.execute(
-            "SELECT DISTINCT group_id FROM photos WHERE group_size > 1 "
-            "AND group_id IS NOT NULL ORDER BY group_id").fetchall()
-        colours = {r[0]: i % GROUP_PALETTE for i, r in enumerate(palette)}
-        for card in cards:
-            card["group_color"] = colours.get(card.get("group_id"))
-
+        cards = _build_cards(lib, ids)
         return jsonify({"filter": flt, "sort": sort, "total": len(cards),
                         "items": cards, "palette": GROUP_PALETTE})
+
+    # ---------------------------------------------------------- 语义搜索
+    @app.get("/api/tags")
+    def tags_list():
+        """词表 + 说明。搜索框拿它做候选和提示。"""
+        from . import tags as tags_mod
+        return jsonify(tags_mod.meta())
+
+    @app.post("/api/embed")
+    def embed_start():
+        """把还没算向量照片补上（幂等：已经算过的直接跳过）。"""
+        lib, err = need_lib()
+        if err:
+            return err
+        from . import embed as embed_mod
+        ok, why = embed_mod.available()
+        if not ok:
+            return jsonify({"ok": False, "error": why, "need_model": not embed_mod.present()})
+        if lib.embedding():
+            return jsonify({"ok": True, "started": False, "progress": lib.progress.snap()})
+        return jsonify({"ok": True, "started": lib.start_embed(),
+                        "progress": lib.progress.snap()})
+
+    @app.get("/api/search")
+    def search():
+        """按场景词找照片。
+
+        分数用的是"每张照片内部的 z-score"，不是原始余弦。原因量过：CLIP 的
+        绝对分数不能跨词比 —— 命中词的最高分能低到 0.235，"地铁"这种不命中
+        的词能高到 0.254；但把每张照片的 78 个词分数标准化以后，命中词
+        (湖泊/人像/雪山) 在 z>2 上有几十张，不命中的 (海边/食物/猫/沙漠/
+        蛋糕) 是 0 张。见 evaluation/search_zscore.py。
+
+        所以：z 越高的越可能对，z>2 就算"这张特别像这个词"，一个都没过线
+        就是"没找到"，并且把词表里长得像的词提出来让人改。
+        """
+        lib, err = need_lib()
+        if err:
+            return err
+        from . import tags as tags_mod
+
+        q = (request.args.get("q") or "").strip()
+        limit = max(1, min(600, int(request.args.get("limit", 300))))
+        zmin = float(request.args.get("z", 2.0))
+        tag, suggests = tags_mod.resolve(q)
+
+        ids, vecs = lib.store.load_vectors(config.EMBED_MODEL)
+        ready = len(ids) > 0 and tags_mod.vectors() is not None
+        if not q:
+            return jsonify({"q": q, "tag": None, "items": [], "total": 0,
+                            "ready": ready, "covered": len(ids)})
+        if tag is None:
+            return jsonify({"q": q, "tag": None, "items": [], "total": 0,
+                            "ready": ready, "covered": len(ids),
+                            "suggestions": suggests,
+                            "message": "词表里没有「{}」".format(q)})
+        if not ready:
+            return jsonify({"q": q, "tag": tag, "items": [], "total": 0,
+                            "ready": False, "covered": 0,
+                            "message": "还没有画面向量"})
+
+        tv = tags_mod.vectors()
+        names = tags_mod.names()
+        k = names.index(tag)
+        s = vecs @ tv.T                              # (N, 78)
+        mu = s.mean(axis=1, keepdims=True)
+        sd = s.std(axis=1, keepdims=True) + 1e-6
+        z = (s - mu) / sd
+        col = z[:, k]
+        order = np.argsort(-col)
+        picked = [i for i in order if col[i] >= zmin][:limit]
+        cards = _build_cards(lib, [ids[i] for i in picked])
+        for card, i in zip(cards, picked):
+            card["score"] = round(float(col[i]), 3)
+            card["cos"] = round(float(s[i, k]), 4)
+        return jsonify({"q": q, "tag": tag, "tag_group": tags_mod.TAGS[k][2],
+                        "items": cards, "total": len(cards), "ready": True,
+                        "covered": len(ids), "zmin": zmin,
+                        "best_z": round(float(col.max()), 3) if len(col) else None})
 
     @app.get("/api/photo/<int:pid>")
     def photo(pid):
@@ -787,6 +839,52 @@ def _issue_summary(lib) -> list[dict]:
 # Distinct colours available to the similar-group view. Must match the number
 # of .listItem.gN rules in style.css -- they are two halves of one contract.
 GROUP_PALETTE = 16
+
+
+def _build_cards(lib, ids: list[int]) -> list[dict]:
+    """卡片形状只在这里定义一次：/api/queue 和 /api/search 都走它。
+
+    两边字段必须一致 —— 前端渲染同一个网格，少一个 decision 或 group_color
+    就会有一半的样式不生效，而且这种偏差只有在"搜索结果里看着不对劲"时
+    才会被发现。
+    """
+    cards = []
+    for pid in ids:
+        row = lib.store.conn.execute(
+            """SELECT p.id, p.name, p.rel_path, p.taken_at, p.taken_ts,
+                      p.camera, p.lens, p.width, p.height,
+                      p.iso, p.shutter, p.aperture, p.focal,
+                      p.pct_high, p.pct_low, p.lap_var_mp, p.noise, p.face_count,
+                      p.group_id, p.group_size, p.group_rank, p.group_score,
+                      p.suggest, p.suggest_reason, p.suggest_conf, p.decision, p.error
+               FROM photos p WHERE p.id=?""", (pid,)).fetchone()
+        if row is None:
+            continue
+        card = dict(row)
+        card["issues"] = [_row_to_card(r) for r in lib.store.conn.execute(
+            "SELECT kind, severity, confidence, face_idx, label_zh, detail, evidence "
+            "FROM issues WHERE photo_id=? ORDER BY CASE severity "
+            "WHEN 'fatal' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 "
+            "WHEN 'low' THEN 3 ELSE 4 END", (pid,)).fetchall()]
+        cards.append(card)
+
+    # A colour index per similar group.
+    #
+    # This used to be group_id % 8 computed in the browser, which cannot work:
+    # this library has 66 groups, so with 8 colours two unrelated groups always
+    # share one and the colour stops telling them apart. The index is a group's
+    # ORDINAL among the multi-photo groups, not a hash of its id.
+    #
+    # Computed here rather than in the list because the list is filtered:
+    # ranking groups within the current view would make a group change colour
+    # when the user switched filters.
+    palette = lib.store.conn.execute(
+        "SELECT DISTINCT group_id FROM photos WHERE group_size > 1 "
+        "AND group_id IS NOT NULL ORDER BY group_id").fetchall()
+    colours = {r[0]: i % GROUP_PALETTE for i, r in enumerate(palette)}
+    for card in cards:
+        card["group_color"] = colours.get(card.get("group_id"))
+    return cards
 
 
 def _select_ids(lib, flt: str, sort: str) -> list[int]:

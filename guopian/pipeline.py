@@ -18,7 +18,7 @@ import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from . import analyze, config, faces, group, imageio, metrics
+from . import analyze, config, embed, faces, group, imageio, metrics
 from .store import Store
 
 
@@ -83,6 +83,7 @@ class Library:
         self.progress = Progress()
         self._cancel = threading.Event()
         self._thread: threading.Thread | None = None
+        self._embed_thread: threading.Thread | None = None
 
     # -------------------------------------------------------------- scan
 
@@ -167,6 +168,75 @@ class Library:
                     if self.progress.done:
                         self.progress.rate = self.progress.done / max(
                             0.001, time.time() - self.progress.started)
+        return len(pending)
+
+    # -------------------------------------------------------------- stage 3
+
+    def embed_pending(self, limit: int | None = None) -> int:
+        """算每张照片的画面向量（语义搜索 + 相似分组的原料）。
+
+        和 analyze_pending 分工不同：那一步算的是"这张图技术上怎么样"，
+        这一步算的是"这张图拍的是什么"。所以它只读已经缓存的预览图，
+        不解原图、不碰 EXIF —— 一个缩略图就够了，一张 20 ms。
+
+        模型不在就安静地跳过。搜索是可选功能，不能因为没下模型就挡住
+        看照片这件事。
+        """
+        ok, why = embed.available()
+        if not ok:
+            self.progress.update(phase="embed-skip", message=why)
+            return 0
+
+        pending = self.store.missing_vectors(config.EMBED_MODEL)
+        if limit:
+            pending = pending[:limit]
+        if not pending:
+            return 0
+
+        self.progress.update(phase="embed", total=len(pending), done=0, ok=0, failed=0,
+                             started=time.time(), finished=0.0,
+                             message="识别画面内容…")
+        from PIL import Image
+
+        size = config.EMBED_BATCH
+        for start in range(0, len(pending), size):
+            if self._cancel.is_set():
+                break
+            chunk = pending[start:start + size]
+            images, keep = [], []
+            for row in chunk:
+                try:
+                    p = self.thumbs.get_or_build(row["path"], row["size"],
+                                                 row["mtime"], config.EMBED_EDGE)
+                    images.append(Image.open(p))
+                    keep.append(row)
+                except Exception:
+                    self.store.mark_error(row["id"], "缩略图读不出来")
+                    with self.progress.lock:
+                        self.progress.done += 1
+                        self.progress.failed += 1
+            if not images:
+                continue
+            try:
+                vecs = embed.encode(images)
+            except Exception as e:
+                # A batch that fails should not take the whole pass down: the
+                # photos stay "missing" and the next run retries them.
+                with self.progress.lock:
+                    self.progress.message = "向量化失败：{}".format(e)
+                continue
+            for row, v in zip(keep, vecs):
+                self.store.set_vector(row["id"], v, config.EMBED_MODEL)
+            self.store.conn.commit()
+            with self.progress.lock:
+                self.progress.done += len(keep)
+                self.progress.ok += len(keep)
+                self.progress.current = keep[-1]["name"]
+                self.progress.rate = self.progress.done / max(
+                    0.001, time.time() - self.progress.started)
+                self.progress.message = "识别画面内容 {}/{}".format(
+                    self.progress.done, self.progress.total)
+        self.progress.update(message="画面识别完成，共 {} 张".format(self.progress.ok))
         return len(pending)
 
     # -------------------------------------------------------------- stage 2
@@ -260,6 +330,11 @@ class Library:
                 return
 
             self.recompute()
+
+            # 画面向量放在最后：它不影响"这张照片好不好"，只影响"找不找得到"。
+            # 先让人能看照片，再让搜索可用。
+            self.embed_pending()
+
             self.progress.update(phase="done", finished=time.time(),
                                  message="分析完成，用时 {:.1f} 秒".format(time.time() - t0))
         except Exception as e:
@@ -274,6 +349,35 @@ class Library:
         self._thread = threading.Thread(target=self.run_full, daemon=True)
         self._thread.start()
         return True
+
+    def embedding(self) -> bool:
+        """向量化那一遍还在跑吗。"""
+        return bool(self._embed_thread and self._embed_thread.is_alive())
+
+    def start_embed(self) -> bool:
+        """只补向量，不重跑分析。
+
+        单独一个入口，因为这两件事的时间尺度差一个数量级：分析 1428 张要
+        几分钟，算向量一分钟。下了模型以后没必要为此重跑一遍分析。
+        """
+        if self.embedding():
+            return False
+        self._cancel.clear()
+        self._embed_thread = threading.Thread(target=self._embed_only, daemon=True)
+        self._embed_thread.start()
+        return True
+
+    def _embed_only(self):
+        """单独补向量时也要把进度状态收尾，否则界面会一直停在"识别中"。"""
+        t0 = time.time()
+        try:
+            n = self.embed_pending()
+            self.progress.update(phase="done", finished=time.time(),
+                                 message="画面识别完成 · {} 张 · {:.0f} 秒".format(
+                                     n, time.time() - t0))
+        except Exception as e:
+            self.progress.update(phase="error",
+                                 message="{}: {}".format(type(e).__name__, e))
 
     def cancel(self):
         self._cancel.set()

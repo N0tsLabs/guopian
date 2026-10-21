@@ -41,6 +41,19 @@ async function loadGrid() {
   catch (e) { return; }
   const items = (q.items || []).slice(0, 1500);
   el.gridCount.textContent = `${q.total} 张` + (q.total > items.length ? `（显示前 ${items.length}）` : '');
+  renderGrid(items);
+  setSearchTitle('');
+}
+
+/* 卡片网格只画一次：队列和搜索结果用的是同一套格子。
+
+   分开写会漂 —— 之前决策网格的那套就是因为两边各画一遍，搜索结果的
+   decision 颜色、相似组角标全都不生效。 */
+function renderGrid(items, emptyHtml) {
+  if (!items.length && emptyHtml) {
+    el.grid.innerHTML = `<div class="gridEmpty">${emptyHtml}</div>`;
+    return;
+  }
   el.grid.innerHTML = items.map(c => {
     const flags = (c.issues || []).slice(0, 3).map(i =>
       `<span class="flag ${i.severity}">${esc(i.label_zh)}</span>`).join('');
@@ -51,6 +64,68 @@ async function loadGrid() {
       <div class="cap">${esc(c.name)}</div>
     </div>`;
   }).join('');
+}
+
+function setSearchTitle(text) {
+  const t = el.gridSearchTitle;
+  const clear = $('#gridSearchClear');
+  if (!t) return;
+  t.textContent = text || '';
+  t.classList.toggle('hidden', !text);
+  if (clear) clear.classList.toggle('hidden', !text);
+}
+
+/* 把一次 /api/search 的结果摊到网格里。
+   没有结果时不说"0 张"，而是把词表里像的词提出来 —— 搜不到时候最需要的
+   是下一步该搜什么。 */
+async function showResults(res) {
+  el.gridView.classList.remove('hidden');
+  $('#appView').classList.add('hidden');
+  const q = res.q || '';
+  if (!res.ready) {
+    el.gridCount.textContent = '';
+    setSearchTitle('');
+    renderGrid([], `画面识别还没完成，搜索暂时用不了。<br>` +
+      `<button class="btn" id="sceneFetch">下载场景模型并开始识别</button>`);
+    const btn = $('#sceneFetch');
+    if (btn) {
+      btn.onclick = async () => {
+        btn.disabled = true;
+        btn.textContent = '正在准备…';
+        try {
+          const r = await api('/api/models/fetch',
+            { method: 'POST', body: JSON.stringify({ name: 'clip_vision.onnx' }) });
+          if (!r.ok) throw new Error(r.error || '下载失败');
+          await api('/api/embed', { method: 'POST', body: '{}' });
+          toast('开始识别画面内容，可以先去干别的');
+          btn.textContent = '正在识别…（进度看顶部）';
+        } catch (e) {
+          toast('准备失败：' + (e.message || e), 'err');
+          btn.disabled = false;
+          btn.textContent = '重试';
+        }
+      };
+    }
+    return;
+  }
+  if (res.tag === null) {
+    const sug = (res.suggestions || []).map(w => `<b>${esc(w)}</b>`).join('、');
+    el.gridCount.textContent = '';
+    setSearchTitle('');
+    renderGrid([], `词表里没有「${esc(q)}」。` +
+      (sug ? `<br>要不要试试：${sug}` : ''));
+    return;
+  }
+  if (!res.total) {
+    el.gridCount.textContent = '';
+    setSearchTitle(`搜索「${res.tag}」`);
+    renderGrid([], `没有照片像「${esc(res.tag)}」（最高匹配度 ${res.best_z}，` +
+      `低于阈值 ${res.zmin}）。<br>换一个词试试，比如「湖泊」「人像」「雪山」。`);
+    return;
+  }
+  el.gridCount.textContent = `${res.total} 张`;
+  setSearchTitle(`搜索「${res.tag}」`);
+  renderGrid(res.items || []);
 }
 
 function onGridClick(e) {
@@ -86,6 +161,6 @@ function configure(hooks) {
 }
 
 
-export { openGrid, closeGrid, loadGrid, onGridClick, decideSelected,
-  configure
+export { openGrid, closeGrid, loadGrid, onGridClick, decideSelected, showResults,
+  renderGrid, setSearchTitle, configure
 };
