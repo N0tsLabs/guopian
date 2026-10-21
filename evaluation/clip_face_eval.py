@@ -1,4 +1,4 @@
-"""Same expression prompts, but on the FACE CROP instead of the whole frame.
+﻿"""Same expression prompts, but on the FACE CROP instead of the whole frame.
 
 The whole-frame test failed: no correlation with blink/smile, and the top hits
 were people in sunglasses rather than closed eyes. A face occupies ~5% of a
@@ -25,9 +25,11 @@ DB = os.path.join(CAT, "catalog.db")
 OUT = os.path.join(ROOT, "docs", "img")
 sys.path.insert(0, VENDOR)
 sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import clip  # noqa: E402
 from guopian import config, imageio  # noqa: E402
+import facecrop  # noqa: E402
 
 PROMPTS = {
     "good": ["a photo of a person with a natural relaxed smile, eyes open"],
@@ -70,16 +72,9 @@ def main():
     for pid in usable:
         p = thumb(rows[pid])
         im = ImageOps.exif_transpose(Image.open(p)).convert("RGB")
-        W, H = im.size
-        f = biggest[pid]
-        # face box is normalised; grow it 60% so eyes+mouth are both inside
-        cw, ch = f["w"] * W, f["h"] * H
-        cx, cy = f["x"] * W, f["y"] * H
-        side = max(cw, ch) * 1.6
-        left = max(0, cx - side / 2)
-        top = max(0, cy - side / 2)
-        box = (int(left), int(top), int(min(W, left + side)), int(min(H, top + side)))
-        vecs.append(pre(im.crop(box)))
+        # 人脸框是「左上角 + 尺寸」。这里以前当成中心点用，裁出来偏了半个脸 ——
+        # 第一版「CLIP 判断不了表情」的结论就是在偏掉的裁切上量的，所以重测。
+        vecs.append(pre(facecrop.crop(im, biggest[pid], 0.6)))
     with torch.no_grad():
         v = m.encode_image(torch.stack(vecs))
     v = (v / v.norm(dim=-1, keepdim=True)).numpy()
@@ -137,3 +132,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
