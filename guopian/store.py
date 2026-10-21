@@ -403,7 +403,7 @@ class Store:
 
     # -- pass 2 -----------------------------------------------------------
     def save_pass2(self, groups: list[dict], verdicts: dict[int, dict],
-                   issues: dict[int, list[dict]]):
+                   issues: dict[int, list[dict]], rows: list[dict]):
         con = self.conn
         con.execute("DELETE FROM issues")
         con.execute("DELETE FROM groups")
@@ -413,12 +413,17 @@ class Store:
             con.execute("INSERT INTO groups(id, label, size, best_photo_id, score_json) "
                         "VALUES(?,?,?,?,?)",
                         (g["gid"], "组 {}".format(g["gid"]), len(g["members"]),
-                         g.get("best"), json.dumps(g.get("scores") or {})))
+                         rows[g["best"]]["id"] if g.get("best") is not None else None,
+                         json.dumps(g.get("scores") or {})))
             for m in g["members"]:
+                # members 是 rows 里的下标，而 WHERE 要的是照片 id。
+                # 这两者只有"入库顺序 == 拍摄顺序"时才恰好相等，这个库里不是，
+                # 于是组信息被写到了别的照片上：DSC00010 和 DSC00011 明明在
+                # 两个组，数据库里却都是"组 4、2 张"。
                 con.execute(
                     "UPDATE photos SET group_id=?, group_size=?, group_rank=?, group_score=? WHERE id=?",
                     (g["gid"], len(g["members"]), g["rank"].get(m, 1),
-                     g["scores"].get(m), m),
+                     g["scores"].get(m), rows[m]["id"]),
                 )
         for pid, v in verdicts.items():
             con.execute("UPDATE photos SET suggest=?, suggest_reason=?, suggest_conf=? WHERE id=?",

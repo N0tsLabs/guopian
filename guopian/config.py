@@ -38,6 +38,18 @@ EMBED_MODEL = "clip-vitb32-int8-v1"
 EMBED_BATCH = 8
 EMBED_EDGE = 1600          # encode the same preview the stage shows
 
+# 分组（有画面向量时走这条路，见 group.build_groups_vec）
+#
+# 为什么和 pHash 那套参数不是一套：pHash 那套是并查集，靠"能借道"把照片串
+# 起来，所以阈值和时间窗都要给得很大才能连上；向量这套是完全连接，借不了道，
+# 阈值给紧反而更准。实测：真近似重复余弦 0.98，同场景不同瞬间 0.90-0.95，
+# "一张双人合影 vs 一张空景" 0.58 —— 0.85 落在空档里。
+GROUP_COSINE = 0.85
+GROUP_WINDOW_SEC = 15.0
+# 一组最多几张。连拍一个上午能在同一机位拍上百张，全串一组就没法"挑一张"了。
+# 12 是"一个连拍序列"的量级，不是"一个景点"。
+GROUP_MAX = 12
+
 # Per-library working data lives in <library>/.guopian/
 WORK_DIR_NAME = ".guopian"
 TRASH_DIR_NAME = "_guopian_rejected"

@@ -8,6 +8,8 @@ cancels out. See docs/05 §2.2.
 
 from __future__ import annotations
 
+import numpy as np
+
 from . import config, phash
 
 
@@ -63,6 +65,21 @@ def _comparable(a: dict, b: dict) -> bool:
     return True
 
 
+def _same_subject(a: dict, b: dict) -> bool:
+    """一张有两个人、另一张一个人都没有 —— 不是可以互相替代的两帧。
+
+    这是用户实际报的那类错：背景一模一样（同一个湖、同一个机位），所以任何
+    "整张图像不像"的度量都认为它们接近；但一张是他俩的合影、一张是空景，
+    在"这两张里挑一张留下"这个用法下它们根本不是同一个瞬间。
+
+    只挡最明确的情况（≥2 人对 0 人）。一张有一人、一张没人，可能是同一个人
+    走进画面，那仍然是同一个瞬间，不该拆。
+    """
+    fa = a.get("face_count") or 0
+    fb = b.get("face_count") or 0
+    return not ((fa >= 2 and fb == 0) or (fb >= 2 and fa == 0))
+
+
 def build_groups(rows: list[dict]) -> list[dict]:
     """`rows` must be sorted by taken_ts. Returns membership + duplicate marks."""
     n = len(rows)
@@ -90,33 +107,98 @@ def build_groups(rows: list[dict]) -> list[dict]:
 
     groups: list[dict] = []
     for gid, members in enumerate(buckets.values(), start=1):
-        sub = [rows[i] for i in members]
+        groups.append(_finish(gid, members, rows))
+    return groups
 
-        # Exact duplicates: same image imported/stored twice. That means
-        # identical pixel dimensions plus a near-identical hash -- a plain
-        # hash match alone also fires on two different frames of one scene.
-        dup_of: dict[int, str] = {}
-        order = sorted(range(len(sub)), key=lambda k: -(sub[k].get("size") or 0))
-        for a_pos, a in enumerate(order):
-            if members[a] in dup_of:
+
+def _finish(gid: int, members: list[int], rows: list[dict]) -> dict:
+    """一个组的收尾：标出精确重复，填好待排名字段。
+
+    两条分组路径（pHash 和画面向量）都走这里，否则"什么算重复"会在两处
+    各写一遍，然后悄悄漂开。
+    """
+    sub = [rows[i] for i in members]
+
+    # Exact duplicates: same image imported/stored twice. That means identical
+    # pixel dimensions plus a near-identical hash -- a plain hash match alone
+    # also fires on two different frames of one scene.
+    dup_of: dict[int, str] = {}
+    order = sorted(range(len(sub)), key=lambda k: -(sub[k].get("size") or 0))
+    for a_pos, a in enumerate(order):
+        if members[a] in dup_of:
+            continue
+        for b in order[:a_pos]:
+            if (sub[a].get("width") != sub[b].get("width") or
+                    sub[a].get("height") != sub[b].get("height")):
                 continue
-            for b in order[:a_pos]:
-                if (sub[a].get("width") != sub[b].get("width") or
-                        sub[a].get("height") != sub[b].get("height")):
-                    continue
-                if phash.hamming(sub[a].get("phash"), sub[b].get("phash")) <= config.PHASH_DUP:
-                    dup_of[members[a]] = sub[b].get("name") or ""
-                    break
+            if phash.hamming(sub[a].get("phash"), sub[b].get("phash")) <= config.PHASH_DUP:
+                dup_of[members[a]] = sub[b].get("name") or ""
+                break
 
-        groups.append({
-            "gid": gid,
-            "members": members,
-            "exact_dup_of": dup_of,
-            "scores": {},
-            "rank": {m: 1 for m in members},
-            "best": None,
-            "best_score": 0.0,
-        })
+    return {
+        "gid": gid,
+        "members": members,
+        "exact_dup_of": dup_of,
+        "scores": {},
+        "rank": {m: 1 for m in members},
+        "best": None,
+        "best_score": 0.0,
+    }
+
+
+def build_groups_vec(rows: list[dict], vec_of: dict[int, np.ndarray],
+                     window: float | None = None, cosine: float | None = None,
+                     max_size: int | None = None) -> list[dict]:
+    """用画面向量分组，**完全连接**：组里任意两张都必须够像。
+
+    这和 pHash 那套（并查集／单链聚合）是两种东西。单链的毛病是能"借道"：
+    A 像 B、B 像 C，于是 A 和 C 成了一组 —— 实测这个库里 128 张照片被串成
+    一组，其中就包括"一张双人合影"和"一张空景"，它们自己的余弦只有 0.58。
+    完全连接堵掉的就是这条路：一张照片要么和组里每一张都够像，要么自己开一组。
+
+    用时间顺序贪心，而不是全局最优聚类：连拍是连续的，先到的照片先成组，
+    结果稳定、不用每次重算都换个分组。组内上限 max_size 是产品决定 ——
+    "挑一张"用得上的是十几张，不是一百张。
+
+    `vec_of` 里没有的照片（还没算向量）直接自成一組，不会掉出列表。
+    """
+    window = config.GROUP_WINDOW_SEC if window is None else window
+    cosine = config.GROUP_COSINE if cosine is None else cosine
+    max_size = config.GROUP_MAX if max_size is None else max_size
+
+    n = len(rows)
+    taken = [False] * n
+    groups: list[dict] = []
+    gid = 0
+    for i in range(n):
+        if taken[i]:
+            continue
+        taken[i] = True
+        a = rows[i]
+        va = vec_of.get(a["id"])
+        members = [i]
+        if va is not None:
+            for j in range(i + 1, n):
+                if taken[j]:
+                    continue
+                b = rows[j]
+                dt = (b.get("taken_ts") or 0.0) - (a.get("taken_ts") or 0.0)
+                if dt > window:
+                    break                      # 时间有序，后面的只会更远
+                if len(members) >= max_size:
+                    break
+                if not _comparable(a, b):
+                    continue
+                if not _same_subject(a, b):
+                    continue
+                vb = vec_of.get(b["id"])
+                if vb is None:
+                    continue
+                if all(float(vb @ vec_of[rows[m]["id"]]) >= cosine for m in members):
+                    members.append(j)
+                    taken[j] = True
+        gid += 1
+        groups.append(_finish(gid, members, rows))
     return groups
 
 

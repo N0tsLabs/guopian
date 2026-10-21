@@ -18,6 +18,8 @@ import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import numpy as np
+
 from . import analyze, config, embed, faces, group, imageio, metrics
 from .store import Store
 
@@ -285,13 +287,36 @@ class Library:
             blk["cast"] = cast_ctx
         self.store.set_meta("calibration", calib)
 
-        groups = group.build_groups(rows)
+        # 分组：有画面向量就用向量（完全连接），没有就退回 pHash（单链）。
+        #
+        # 这不是"更好的算法当默认"这种口味问题。旧的单链聚合会把一整个上午
+        # 在同一机位拍的照片串成一大组 —— 实测 128 张一组，里面既有双人合影
+        # 也有空景（两者余弦只有 0.58）。向量这条路能分清"同一个场景"和
+        # "同一个瞬间"，因为它比的是内容，不是低频结构。
+        ids, mat = self.store.load_vectors(config.EMBED_MODEL)
+        vec_of: dict[int, np.ndarray] = {}
+        if len(ids) >= max(8, int(len(rows) * 0.8)):
+            vec_of = {pid: mat[i] for i, pid in enumerate(ids)}
+        if vec_of:
+            groups = group.build_groups_vec(rows, vec_of)
+            self.progress.update(message="按画面内容分组（{} 张有向量）…".format(len(vec_of)))
+        else:
+            groups = group.build_groups(rows)
         group.rank_groups(rows, face_index, groups)
 
+        # 键必须是照片 id，不是 rows 里的下标。
+        #
+        # 这里原来写的是 row_group_ctx[m]（m 是 groups.members 里的下标），
+        # 而下面按 row_group_ctx.get(r["id"]) 取 —— 相差一个"下标 vs id"。
+        # rows 按拍摄时间排序、id 按入库顺序，两者只有恰好一致时才不出错；
+        # 这个库里一错到底：组信息被贴到了别的照片上，于是"两张不同瞬间的
+        # 照片在同一个组里"、"组里有俩人也有空景"这种怪现象，分组算法本身
+        # 反而是对的。
         row_group_ctx: dict[int, dict] = {}
         for g in groups:
             for m in g["members"]:
-                row_group_ctx[m] = {
+                pid = rows[m]["id"]
+                row_group_ctx[pid] = {
                     "group_size": len(g["members"]),
                     "group_rank": g["rank"].get(m, 1),
                     "group_best": g.get("best") == m,
@@ -307,7 +332,7 @@ class Library:
             issues[r["id"]] = items
             verdicts[r["id"]] = analyze.verdict_from(items, row_group_ctx.get(r["id"]))
 
-        self.store.save_pass2(groups, verdicts, issues)
+        self.store.save_pass2(groups, verdicts, issues, rows)
         tally: dict[str, int] = {}
         for v in verdicts.values():
             tally[v["suggest"]] = tally.get(v["suggest"], 0) + 1
@@ -329,11 +354,11 @@ class Library:
                 self.progress.update(phase="cancelled", message="已取消")
                 return
 
-            self.recompute()
-
-            # 画面向量放在最后：它不影响"这张照片好不好"，只影响"找不找得到"。
-            # 先让人能看照片，再让搜索可用。
+            # 先算画面向量，再算分组：分组要用它们（见 recompute）。
+            # 没有模型时这一步立刻返回 0，不会拖慢打开库。
             self.embed_pending()
+
+            self.recompute()
 
             self.progress.update(phase="done", finished=time.time(),
                                  message="分析完成，用时 {:.1f} 秒".format(time.time() - t0))
@@ -372,6 +397,10 @@ class Library:
         t0 = time.time()
         try:
             n = self.embed_pending()
+            if n:
+                # 有了向量，分组就该按向量重算：否则搜索已经按内容在找了，
+                # 相似组还是 pHash 那套旧结果，同一个界面里两套标准。
+                self.recompute()
             self.progress.update(phase="done", finished=time.time(),
                                  message="画面识别完成 · {} 张 · {:.0f} 秒".format(
                                      n, time.time() - t0))
