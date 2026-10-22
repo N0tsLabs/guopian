@@ -43,7 +43,14 @@ TRASH_DIR_NAME = "_guopian_rejected"
 #    single-eye rule flagged four confident false positives on one library),
 #    CATCHLIGHT_MIN moved off the median (0.12 -> 0.04), and the frown label was
 #    corrected to say what browDown actually measures.
-ANALYSIS_VERSION = 6
+# 7: 睁眼/张嘴改由几何量判定（EAR / MAR，从同一批关键点算），blendshape 只当
+#    旁证。原因：同一张照片，库里存的 blink 是 0.71/0.85（眼睛睁着），换个解码
+#    尺寸跑到 0.07/0.13；jawOpen 在闭嘴的照片上读到过 0.41/0.61。旧数据没有
+#    ear_l / ear_r / mar，必须重算，所以版本号跟着变。
+# 10: 加了 MAR 上限（>0.22 说明那张「脸」本身就检错了）。
+# 9: looking_away 默认不再上报（eyeLook* 实测会指错方向），睁眼/张嘴改用
+#    EAR / MAR。这两件事都改变了输出，所以要重算。
+ANALYSIS_VERSION = 10
 
 # 首屏"边分析边分类"图表：每收满这么多张重算一次阈值。
 # 阈值（soft / noisy）是按整批照片的分布算出来的，分析开始时没有分布可用，
@@ -141,7 +148,25 @@ EYE_BLINK_CLOSED = 0.60
 EYE_BLINK_MAYBE = 0.40
 EYE_MIN_PIXELS = 18           # eye crop shorter side, decoded pixels
 
-MOUTH_OPEN = 0.40
+# 睁眼/闭眼改由几何量 EAR 判定（上下眼睑距离 / 眼宽），blendshape 只当旁证。
+#
+# 为什么换：同一个模型对同一张照片能给两套完全不同的 blink —— 库里存的是
+# 0.71/0.85（眼睛明明睁着），换个解码尺寸跑到 0.07/0.13。fatal 级判定靠这种
+# 数会误伤。EAR 是同一批关键点算出来的比值，实测在真实照片上很干净：
+#   真闭眼  0.07 / 0.11 / 0.13 / 0.17
+#   睁眼    0.25 / 0.31 / 0.34 / 0.35 / 0.43
+# 中间 0.19–0.25 基本是空的，所以阈值放在 0.19，留一点保守余量。
+EYE_EAR_CLOSED = 0.19         # <= 判"闭眼"（fatal）
+EYE_EAR_MAYBE = 0.22          # <= 判"可能闭着"（medium）
+EYE_EAR_OPEN_MIN = 0.25       # >= 这个值就是睁着，blendshape 说什么都不改判
+
+MOUTH_OPEN = 0.40             # 老口径（jawOpen），只在没有 MAR 时兜底
+# 张嘴同样改用几何量 MAR（内唇间距 / 眼距）。闭嘴实测 0.01–0.03，
+# 而 jawOpen 在闭嘴的照片上读到过 0.41 / 0.61 —— 后者不能用。
+MOUTH_MAR_OPEN = 0.075
+# 超过这个数说明「脸」本身检错了（云彩/布料被当成脸），
+# 那种情况下不产生任何表情结论
+MOUTH_MAR_MAX = 0.22
 
 # browDown rises when frowning AND when concentrating, squinting into harsh
 # light, or just holding a neutral face. 0.40 was low enough that a single
@@ -155,6 +180,8 @@ SQUINT_GOOD = 0.25
 # Gaze. "Looking away" is the single easiest signal to get wrong: in candid
 # travel photos it is the *norm*, not a defect. It is therefore session
 # relative, low severity, and never drives a reject on its own.
+# 视线判定暂时关闭：见 analyze.py 里的说明（eyeLook* 在真实照片上误报率高）
+REPORT_LOOKING_AWAY = False
 GAZE_AWAY = 0.45
 GAZE_SESSION_PCT = 85.0
 FACE_BLUR_RATIO = 0.18   # face ROI sharpness vs whole-frame sharpness
@@ -391,3 +418,6 @@ def apply_settings(s: dict | None = None) -> dict:
     PHASH_SIMILAR = int(s.get("phash_similar") or PHASH_SIMILAR)
 
     return s
+
+
+

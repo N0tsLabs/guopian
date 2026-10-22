@@ -54,9 +54,13 @@ def analyze_photo(path: str) -> dict:
         try:
             face_rows = faces.analyze_faces(img, gray, norm_scale, m["lap_var"], decode_scale)
             m["face_count"] = len(face_rows)
-        except Exception:
+        except Exception as e:
+            # 不能静默吞掉：这里出过一次 bug（缺一个常量），结果整库 386 张
+            # 全部"没人脸"，而分析照样报"完成"。错误要留痕，不然只有靠人工
+            # 抽查才能发现。
             face_rows = []
             m["face_count"] = 0
+            meta["face_error"] = "{}: {}".format(type(e).__name__, e)
 
     try:
         ph = phash.phash_gray(gray)
@@ -220,39 +224,68 @@ def evaluate(row: dict, face_rows: list[dict], calib: dict,
         # possibly closed" was the source of four confident false positives on a
         # real library (0.49/0.20, 0.45/0.25, 0.48/0.33, 0.44/0.19 -- all one
         # eye high, the other low, all reported as blinks).
-        both_closed = bl_l >= config.EYE_BLINK_CLOSED and bl_r >= config.EYE_BLINK_CLOSED
-        both_maybe = bl_l >= config.EYE_BLINK_MAYBE and bl_r >= config.EYE_BLINK_MAYBE
-        # Kept in the evidence so an asymmetric reading is still visible to
-        # whoever is wondering why this photo was not flagged.
+        both_blink = bl_l >= config.EYE_BLINK_MAYBE and bl_r >= config.EYE_BLINK_MAYBE
+
+        # 睁眼/闭眼以**几何量**为准，blendshape 只当旁证。
+        #
+        # 原因：blendshape 在真实照片上不稳。同一张照片，库里存的 blink 是
+        # 0.71/0.85，换个解码尺寸再跑读到 0.07/0.13 —— 而这种差异会直接变成
+        # fatal 级的误判（"眼睛闭合"把人吓得不敢留那张）。EAR 是同一批关键点
+        # 算出来的比值，实测：真闭眼 0.07–0.17，睁眼 0.25–0.43，中间空得很开。
+        ear_l, ear_r = f.get("ear_l"), f.get("ear_r")
+        ear = min([v for v in (ear_l, ear_r) if v is not None], default=None)
+        ear_closed = ear is not None and ear <= config.EYE_EAR_CLOSED
+        ear_maybe = ear is not None and ear <= config.EYE_EAR_MAYBE
+
         blink_ev = {**bx, "blink_l": bl_l, "blink_r": bl_r,
+                    "ear_l": ear_l, "ear_r": ear_r,
                     "asymmetric": abs(bl_l - bl_r) >= 0.25}
-        if both_closed:
-            conf = min(bl_l, bl_r)      # the weaker eye is the honest one
-            issues.append(_issue("eye_closed", "fatal", conf,
-                                 "双眼闭合（{:.2f} / {:.2f}）".format(bl_l, bl_r),
+        if ear_closed:
+            issues.append(_issue("eye_closed", "fatal", min(0.95, 0.55 + (0.19 - ear)),
+                                 "双眼闭合（EAR {:.2f}）".format(ear),
                                  face_idx=i, evidence=blink_ev))
-        elif both_maybe:
-            conf = min(bl_l, bl_r)
-            issues.append(_issue("eye_maybe_closed", "medium", conf,
-                                 "双眼可能闭合（{:.2f} / {:.2f}）".format(bl_l, bl_r),
+        elif ear_maybe:
+            issues.append(_issue("eye_maybe_closed", "medium", min(0.9, 0.4 + (0.22 - ear)),
+                                 "眼睛接近闭合（EAR {:.2f}）".format(ear),
+                                 face_idx=i, evidence=blink_ev))
+        elif both_blink and ear is not None and ear >= config.EYE_EAR_OPEN_MIN:
+            # 几何说睁着、blendshape 说闭着 —— 以几何为准，但把矛盾留在证据里
+            # （排查时能看到"这个模型本身在这里就不一致"）。
+            pass
+        elif both_blink:
+            issues.append(_issue("eye_maybe_closed", "medium",
+                                 min(0.7, min(bl_l, bl_r)),
+                                 "可能闭眼（blinkshape {:.2f} / {:.2f}）".format(bl_l, bl_r),
                                  face_idx=i, evidence=blink_ev))
 
         # Catchlight: an open eye with no specular highlight reads as dead on a
         # portrait. Only reported when BOTH eyes lack it, and only as a hint --
         # overcast daylight genuinely gives weaker catchlights than a strobe.
         cl, cr = f.get("catch_l"), f.get("catch_r")
-        if (not both_closed and cl is not None and cr is not None
+        if (not ear_closed and cl is not None and cr is not None
                 and cl < config.CATCHLIGHT_MIN and cr < config.CATCHLIGHT_MIN):
             issues.append(_issue("no_catchlight", "low", 0.45,
                                  "两眼都缺少眼神光（{:.2f} / {:.2f}）".format(cl, cr),
                                  face_idx=i, evidence={**bx, "catch_l": cl, "catch_r": cr}))
 
+        # 张嘴同样以几何量为准：jawOpen 在闭嘴的照片上能读到 0.41、0.61，
+        # 而 MAR（内唇间距 / 眼距）闭嘴时稳定在 0.01–0.03。
         jaw = f.get("jaw_open") or 0.0
         smile = f.get("smile") or 0.0
-        if jaw > config.MOUTH_OPEN and smile < 0.2:
-            issues.append(_issue("mouth_open", "medium", min(0.9, jaw),
-                                 "张嘴度 {:.2f}".format(jaw), face_idx=i,
-                                 evidence={**bx, "jaw_open": jaw}))
+        mar = f.get("mar")
+        # MAR 有个物理上限：嘴张到最大也到不了"0.22 个眼距"。超过这个数的，
+        # 实测是云彩/布料被误检成脸（#1215 那张云，MAR 读到 0.31）——
+        # 这种"脸"不该产生任何表情结论。
+        mar_sane = mar is None or mar <= config.MOUTH_MAR_MAX
+        mouth_open = mar_sane and (
+            (mar is not None and mar >= config.MOUTH_MAR_OPEN) or
+            (mar is None and jaw > config.MOUTH_OPEN))
+        if mouth_open and smile < 0.2:
+            conf = min(0.9, (mar or jaw))
+            detail = ("张嘴度 MAR {:.3f}".format(mar) if mar is not None
+                      else "张嘴度 {:.2f}".format(jaw))
+            issues.append(_issue("mouth_open", "medium", conf, detail, face_idx=i,
+                                 evidence={**bx, "jaw_open": jaw, "mar": mar}))
 
         brow = f.get("brow_down") or 0.0
         if brow > config.FROWN_BROW and smile < 0.2 and jaw < config.MOUTH_OPEN:
@@ -263,10 +296,18 @@ def evaluate(row: dict, face_rows: list[dict], calib: dict,
         # "Looking away" stays LOW severity and session-relative on purpose.
         # In candid travel photos it is the norm, not a defect -- flagging it
         # absolutely would put a warning on half the library (docs/05 3.3).
+        #
+        # 但这一条目前**默认不上报**：gaze 来自 eyeLook* blendshape，实测在
+        # 真实照片上不可靠 —— 抽查 4 张"明确看着镜头"的照片，3 张被判"视线
+        # 没看镜头"（#99/#284/#344）。宁可少一条提示，也不要给一条错的。
+        # 值仍然算出来留在证据里；要重新打开，配 config.REPORT_LOOKING_AWAY，
+        # 前提是先有可靠的虹膜位置度量（evaluation/gaze_probe2.py 里在试）。
         away = f.get("gaze_away") or 0.0
         gaze_p = th.get("gaze_p85") or 0.0
         yaw = abs(f.get("yaw") or 0.0)
-        if away > config.GAZE_AWAY and away >= gaze_p and yaw <= config.FACE_EDGE_MAX_YAW:
+        if (config.REPORT_LOOKING_AWAY
+                and away > config.GAZE_AWAY and away >= gaze_p
+                and yaw <= config.FACE_EDGE_MAX_YAW):
             issues.append(_issue("looking_away", "info", min(0.6, 0.3 + away / 4.0),
                                  "视线偏移 {:.2f}".format(away), face_idx=i,
                                  evidence={**bx, "gaze_x": f.get("gaze_x"),

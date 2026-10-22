@@ -28,6 +28,30 @@ _MP_ERROR = None
 # FaceMesh landmark index groups
 _R_EYE = (33, 133, 159, 145, 153, 144)     # subject's right eye (image left)
 _L_EYE = (263, 362, 386, 374, 380, 373)    # subject's left eye  (image right)
+
+# 算 EAR 用的上下眼睑对（左右各三对），和 dlib 68 点的 EAR 方案一一对应。
+# 别用 _R_EYE 里的顺序：那六个点是给裁剪框用的，混着水平/垂直点对。
+_R_EYE_V = ((159, 145), (158, 153), (160, 144))
+_L_EYE_V = ((386, 374), (385, 380), (387, 373))
+_R_EYE_H = (33, 133)                       # 外眼角 / 内眼角，EAR 的分母
+_L_EYE_H = (362, 263)
+_LIP_V = (13, 14)                          # 内唇 上 / 下
+
+
+def _dist(pts, a: int, b: int, w: float, h: float) -> float:
+    return float(np.hypot((pts[a][0] - pts[b][0]) * w, (pts[a][1] - pts[b][1]) * h))
+
+
+def _ear(pts, vpairs, horiz, w: float, h: float) -> float:
+    """Eye aspect ratio：上下眼睑距离 / 眼宽。闭眼明显变小，和分辨率无关。"""
+    v = float(np.mean([_dist(pts, a, b, w, h) for a, b in vpairs]))
+    return v / max(1e-6, _dist(pts, horiz[0], horiz[1], w, h))
+
+
+def _mar(pts, w: float, h: float) -> float:
+    """Mouth aspect ratio：内唇上下距离 / 两眼间距。闭嘴接近 0。"""
+    eye_gap = _dist(pts, 33, 263, w, h)
+    return _dist(pts, _LIP_V[0], _LIP_V[1], w, h) / max(1e-6, eye_gap)
 _LEFT_FACE = 234
 _RIGHT_FACE = 454
 _NOSE = 1
@@ -387,10 +411,24 @@ def analyze_faces(img: Image.Image, gray_norm: np.ndarray,
         if face_sharp is not None and frame_lap_var > 1e-6:
             face_ratio = float(face_sharp / frame_lap_var)
 
+        # ---- 几何量（比 blendshape 稳） -----------------------------------
+        #
+        # 实测同一个模型对同一张照片能给两套完全不同的 blink：有人睁着眼睛
+        # blink 读到 0.71/0.85（存进库里的就是这个），换个解码尺寸再跑读到
+        # 0.07/0.13。fatal 级别的"眼睛闭合"不能只靠这种数。
+        #
+        # 478 个点本来就是同一次推理给的，顺手算两个尺度无关的比值：
+        #   EAR = 上下眼睑距离 / 眼宽    真闭眼 0.07–0.17，睁眼 0.25–0.43
+        #   MAR = 上下内唇距离 / 眼距    闭嘴 ~0.01–0.03
+        ear_r = _ear(pts, _R_EYE_V, _R_EYE_H, W, H)
+        ear_l = _ear(pts, _L_EYE_V, _L_EYE_H, W, H)
+        mar = _mar(pts, W, H)
+
         out.append({
             "x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0,
             "yaw": float(yaw), "pitch": float(pitch), "roll": float(roll),
             "blink_l": g("eyeBlinkLeft"), "blink_r": g("eyeBlinkRight"),
+            "ear_l": ear_l, "ear_r": ear_r, "mar": mar,
             "gaze_x": float(gaze_x), "gaze_y": float(gaze_y), "gaze_away": gaze_away,
             "smile": float(smile), "jaw_open": float(jaw_open),
             "brow_down": float(brow_down), "squint": float(squint),

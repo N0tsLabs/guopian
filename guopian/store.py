@@ -20,6 +20,8 @@ _ADDED_PHOTO_COLUMNS = (
 )
 _ADDED_FACE_COLUMNS = (
     ("face_median", "REAL"), ("catch_l", "REAL"), ("catch_r", "REAL"),
+    # 几何量（眼睑/嘴唇），判断睁眼张嘴比 blendshape 稳，见 faces._ear
+    ("ear_l", "REAL"), ("ear_r", "REAL"), ("mar", "REAL"),
 )
 
 # The face row is wide and has grown twice. Building the statement from the
@@ -31,7 +33,8 @@ _FACE_COLS = (
     "blink_l", "blink_r", "gaze_x", "gaze_y", "gaze_away",
     "smile", "jaw_open", "brow_down", "squint",
     "face_sharp", "face_sharp_ratio", "face_pct_high", "face_pct_low",
-    "face_px", "eye_px", "face_median", "catch_l", "catch_r", "landmarks",
+    "face_px", "eye_px", "face_median", "catch_l", "catch_r",
+    "ear_l", "ear_r", "mar", "landmarks",
 )
 _FACE_INSERT = "INSERT INTO faces({}) VALUES({})".format(
     ",".join(_FACE_COLS), ",".join("?" * len(_FACE_COLS)))
@@ -50,6 +53,7 @@ def _face_values(photo_id: int, idx: int, f: dict):
         f.get("face_pct_high"), f.get("face_pct_low"),
         (f.get("gates") or {}).get("face_px"), (f.get("gates") or {}).get("eye_px"),
         f.get("face_median"), f.get("catch_l"), f.get("catch_r"),
+        f.get("ear_l"), f.get("ear_r"), f.get("mar"),
         json.dumps(f.get("landmarks")) if f.get("landmarks") else None,
     )
 
@@ -137,6 +141,7 @@ CREATE TABLE IF NOT EXISTS faces (
     face_px REAL, eye_px REAL,
     face_median REAL,
     catch_l REAL, catch_r REAL,
+    ear_l REAL, ear_r REAL, mar REAL,
     landmarks     TEXT,   -- JSON: the few landmark points we draw (eyes, nose, oval)
     PRIMARY KEY (photo_id, idx)
 );
