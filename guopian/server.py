@@ -307,21 +307,31 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
         prog = lib.progress.snap()
         from . import embed as embed_mod
         emb_ok, emb_why = embed_mod.available()
+        counts = lib.counts()
         return jsonify({
             "root": lib.root,
             "slug": paths.slug(lib.root),
             "work_dir": lib.work_dir,
+            # catalog 的身份。前端用它当"上次看到第几张"的 key —— 删掉数据
+            # 重新扫描以后照片 id 会从头分配，用根目录当 key 会把人送到一张
+            # 毫无关系的照片上。
+            "catalog_key": _catalog_key(lib),
             "read_only": bool(lib.read_only),
             "generation": sess.generation,
             "progress": prog,
-            "counts": lib.counts(),
+            "counts": counts,
+            # 该不该先看整页进度：服务端知道得比前端准。
+            # 前端曾经用"analyzed < total"判断，可刚打开的库在扫描完成前
+            # total 还是 0，于是整页进度被跳过、只剩左上角那条细线。
+            "boot_needed": bool(prog.get("running") or
+                                (counts["total"] and counts["analyzed"] < counts["total"])),
             "face_available": _faces_ok(),
             "embed": {
                 "ok": emb_ok,
                 "message": emb_why,
                 "model_present": embed_mod.present(),
                 "covered": lib.store.vector_count(config.EMBED_MODEL),
-                "total": lib.counts()["total"],
+                "total": counts["total"],
             },
             "calibration": lib.store.get_meta("calibration"),
             "issue_summary": _issue_summary(lib),
@@ -813,6 +823,20 @@ def _faces_ok() -> dict:
 
     ok, msg = faces_mod.available()
     return {"ok": ok, "message": msg}
+
+
+def _catalog_key(lib) -> str:
+    """这个 catalog 的身份（数据库文件的创建时间）。
+
+    前端拿它当 localStorage 的 key。照片 id 在新建的 catalog 里从头分配，
+    所以"删掉数据重新扫描"以后，用根目录当 key 会把上次记下的 id 套到一张
+    完全不相干的照片上 —— 用户看到的就是"它自己选中了一张我没选的图"。
+    """
+    try:
+        st = os.stat(os.path.join(lib.work_dir, "catalog.db"))
+        return "{}-{}".format(int(st.st_ctime), int(st.st_size))
+    except OSError:
+        return "0"
 
 
 def _boot_block(lib, prog: dict) -> dict:

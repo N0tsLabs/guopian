@@ -20,9 +20,14 @@ import { esc, $$, imgUrl } from './core.js';
 /* ── where to put the cursor when a list loads ──
    Reopening a project should land you back where you were, not at the top.
    If we have nothing remembered, start at the first photo that still needs
-   a decision -- that is almost always what you came back to do. */
+   a decision -- that is almost always what you came back to do.
+
+   The key is the **catalog**, not the folder. 照片 id 是 catalog 内部的编号：
+   删掉数据重新扫描以后 id 从头分配，用文件夹当 key 会拿上次记下的 id 去匹配
+   新库里一张毫不相干的照片 —— 表现就是"它自己选中了一张我没选的图"。 */
 function posKey() {
-  return 'guopian.pos.' + ((S.state && S.state.root) || '');
+  const k = (S.state && (S.state.catalog_key || S.state.root)) || '';
+  return 'guopian.pos.' + k;
 }
 
 function savedPos() {
@@ -41,7 +46,8 @@ function savedPos() {
  * survives closing the app -- the window profile lives in the data directory,
  * not a temp one, so this really does persist. */
 function sessKey() {
-  return 'guopian.sess.' + ((S.state && S.state.root) || '');
+  const k = (S.state && (S.state.catalog_key || S.state.root)) || '';
+  return 'guopian.sess.' + k;
 }
 
 function savedSession() {
@@ -61,7 +67,24 @@ function savePos(id) {
   try { localStorage.setItem(posKey(), String(id)); } catch (e) { /* ignore */ }
 }
 
+/* 旧版用文件夹路径当 key 记"看到第几张"，换成 catalog key 以后那些条目永远
+   读不到了；留着只会一直占地方，顺手清掉一次。 */
+let purgedLegacy = false;
+function purgeLegacyKeys() {
+  if (purgedLegacy) return;
+  purgedLegacy = true;
+  const prefixes = ['guopian.pos.', 'guopian.sess.'];
+  try {
+    for (const k of Object.keys(localStorage)) {
+      const pre = prefixes.find(p => k.startsWith(p));
+      if (!pre) continue;
+      if (!/^\d+-\d+$/.test(k.slice(pre.length))) localStorage.removeItem(k);
+    }
+  } catch (e) { /* ignore */ }
+}
+
 function pickStartIndex() {
+  purgeLegacyKeys();
   if (!S.queue.length) return 0;
   const id = savedPos();
   if (id) {

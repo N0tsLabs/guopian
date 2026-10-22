@@ -173,12 +173,15 @@ function start() {
    已有分析结果的库（重新打开）直接跳过，不弹这一屏。 */
 function needsBoot(st) {
   if (!st || !st.counts) return false;
+  // 服务端直接告诉我们该不该先看整页进度。用 "analyzed < total" 自己算会
+  // 漏掉最关键的一段：刚打开的库在扫描完成之前 total 还是 0，条件不成立，
+  // 于是整页进度被跳过，只剩左上角那条细线。
+  if (typeof st.boot_needed === 'boolean') return st.boot_needed;
+  const p = st.progress || {};
+  if (p.running) return true;
   const total = st.counts.total || 0;
   const analyzed = st.counts.analyzed || 0;
-  if (!total || analyzed >= total) return false;
-  // 没有任何进度且没有待分析项 = 打不开就算了，别把人锁在这一屏
-  const phase = (st.progress && st.progress.phase) || 'idle';
-  return phase !== 'idle' || analyzed < total;
+  return !!total && analyzed < total;
 }
 
 async function runBoot(initial) {
