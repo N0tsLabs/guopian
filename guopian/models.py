@@ -24,6 +24,13 @@ MODEL_URLS = {
         "https://storage.googleapis.com/mediapipe-models/face_landmarker/"
         "face_landmarker/float16/1/face_landmarker.task"
     ),
+    # MobileNetV3-Small 的特征头（没有分类头），用来判"两张图像不像同一个场景"。
+    # 3.7 MB、CPU 0.9 ms/张。由 evaluation/export_mnet_onnx.py 导出，导出后
+    # 要放进 release 资产；本地存在就直接用，不会去下载。
+    "photo_embed.onnx": (
+        "https://github.com/N0tsLabs/guopian/releases/download/models-v1/"
+        "photo_embed.onnx"
+    ),
 }
 
 

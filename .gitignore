@@ -16,6 +16,8 @@ release/
 # Guopian runtime data
 .cache/
 models/*.task
+# 照片向量模型也按需下载（3.7 MB），不进仓库
+models/*.onnx
 .guopian/
 _guopian_rejected/
 catalogs/

@@ -197,6 +197,26 @@ PHASH_SIMILAR = 10        # <= same moment / near duplicate
 # difference means the pHash match is a coincidence (blurred photos collide).
 GROUP_ASPECT_TOL = 0.08
 
+# ---------------------------------------------------- 照片向量（相似组的判定）
+#
+# MobileNetV3-Small 的特征头，导出 ONNX 3.7 MB、CPU 0.9 ms/张、每张 1.1 KB。
+# 存在的理由只有一个：pHash 判不了"同一个人换了动作"。实测同一个库、相邻
+# 60 秒的照片对，pHash 距离中位数 26（阈值 10），特征余弦中位数 0.87。
+#
+# 这些阈值是两个真实库上用对照图核过的（见 evaluation/mnet_edges.py）：
+# 0.85 时"组内最弱的 16 对"全部是同一场景的不同动作，没有错并；
+# 再往上调就会把"全身 vs 特写"这种同场景拆开，再往下调会把不同场景并进来。
+EMBED_MODEL_FILE = os.path.join(MODEL_DIR, "photo_embed.onnx")
+# 参与身份：换模型/换预处理/换特征层就要改这个值，旧向量会被重算而不是混用
+EMBED_MODEL = "mobilenetv3s-576-v1"
+EMBED_DIM = 576
+EMBED_BATCH = 16
+EMBED_COSINE = 0.85       # 完全连接的相似阈值
+EMBED_WINDOW_SEC = 600.0  # 同一个场景可能隔几分钟才再拍一张
+# 一组最多几张。12 太小：一段十分钟的拍摄会被切成四五个组；
+# 24 是"一次连拍/一个机位"的量级，仍然能一眼挑完。
+GROUP_MAX = 24
+
 # ---------------------------------------------------------------- decisions
 
 DECISIONS = ("keep", "reject", "mark")

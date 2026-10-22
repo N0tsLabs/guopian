@@ -305,6 +305,8 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
         if err:
             return err
         prog = lib.progress.snap()
+        from . import embed as embed_mod
+        emb_ok, emb_why = embed_mod.available()
         return jsonify({
             "root": lib.root,
             "slug": paths.slug(lib.root),
@@ -314,6 +316,13 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
             "progress": prog,
             "counts": lib.counts(),
             "face_available": _faces_ok(),
+            "embed": {
+                "ok": emb_ok,
+                "message": emb_why,
+                "model_present": embed_mod.present(),
+                "covered": lib.store.vector_count(config.EMBED_MODEL),
+                "total": lib.counts()["total"],
+            },
             "calibration": lib.store.get_meta("calibration"),
             "issue_summary": _issue_summary(lib),
             "labels": _labels(),
@@ -321,6 +330,22 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
         })
 
     # ---------------------------------------------------------- models
+    @app.post("/api/embed")
+    def embed_start():
+        """补算照片向量（幂等）。有了它，相似组才按"画面内容"分。"""
+        lib, err = need_lib()
+        if err:
+            return err
+        from . import embed as embed_mod
+        ok, why = embed_mod.available()
+        if not ok:
+            return jsonify({"ok": False, "error": why,
+                            "need_model": not embed_mod.present()})
+        if lib.embedding():
+            return jsonify({"ok": True, "started": False, "progress": lib.progress.snap()})
+        return jsonify({"ok": True, "started": lib.start_embed(),
+                        "progress": lib.progress.snap()})
+
     @app.get("/api/models")
     def models_status():
         from . import models as models_mod
@@ -396,7 +421,12 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
         lib, err = need_lib()
         if err:
             return err
-        return jsonify({"ok": True, "result": lib.recompute()})
+        try:
+            return jsonify({"ok": True, "result": lib.recompute()})
+        finally:
+            # recompute 是同步算完的，别把 progress 留在"正在分组"上 ——
+            # 否则顶栏会一直显示一个 0/0 的进度条。
+            lib.progress.update(phase="done", message="已重新分组")
 
     # ---------------------------------------------------------- images
     @app.get("/api/cover")

@@ -18,7 +18,9 @@ import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from . import analyze, config, faces, group, imageio, metrics
+import numpy as np
+
+from . import analyze, config, embed, faces, group, imageio, metrics
 from .store import Store, face_gates as store_face_gates
 
 
@@ -88,6 +90,7 @@ class Library:
         self.progress = Progress()
         self._cancel = threading.Event()
         self._thread: threading.Thread | None = None
+        self._embed_thread: threading.Thread | None = None
 
     # -------------------------------------------------------------- scan
 
@@ -180,6 +183,61 @@ class Library:
                         self.progress.rate = self.progress.done / max(
                             0.001, time.time() - self.progress.started)
         return len(pending)
+
+    # -------------------------------------------------- 照片向量（相似组的原料）
+
+    def embed_pending(self, limit: int | None = None) -> int:
+        """给还没算向量的照片算一遍（MobileNetV3-Small 特征，576 维）。
+
+        单独一遍、只读缓存的预览图：一张 0.9 ms，1428 张几秒钟。
+        没有模型就安静跳过 —— 这时分组退回 pHash，功能不残，只是没那么准。
+        """
+        ok, why = embed.available()
+        if not ok:
+            self.progress.update(phase="embed-skip", message=why)
+            return 0
+
+        pending = self.store.missing_vectors(config.EMBED_MODEL)
+        if limit:
+            pending = pending[:limit]
+        if not pending:
+            return 0
+
+        self.progress.update(phase="embed", total=len(pending), done=0, ok=0, failed=0,
+                             started=time.time(), finished=0.0, message="提取画面特征…")
+        from PIL import Image
+
+        for start in range(0, len(pending), config.EMBED_BATCH):
+            if self._cancel.is_set():
+                break
+            chunk = pending[start:start + config.EMBED_BATCH]
+            images, keep = [], []
+            for row in chunk:
+                try:
+                    p = self.thumbs.get_or_build(row["path"], row["size"], row["mtime"],
+                                                 config.THUMB_SMALL)
+                    images.append(Image.open(p))
+                    keep.append(row)
+                except Exception as e:
+                    with self.progress.lock:
+                        self.progress.done += 1
+                        self.progress.failed += 1
+                        # 失败原因必须露出来：否则界面只看到"0 张"，像是没跑过
+                        self.progress.message = "{} 失败：{}".format(row["name"], e)
+            if images:
+                for row, v in zip(keep, embed.encode(images)):
+                    self.store.set_vector(row["id"], v, config.EMBED_MODEL)
+                self.store.conn.commit()
+                with self.progress.lock:
+                    self.progress.done += len(keep)
+                    self.progress.ok += len(keep)
+                    self.progress.current = keep[-1]["name"]
+                    self.progress.rate = self.progress.done / max(
+                        0.001, time.time() - self.progress.started)
+                    self.progress.message = "提取画面特征 {}/{}".format(
+                        self.progress.done, self.progress.total)
+        self.progress.update(message="画面特征完成，{} 张".format(self.progress.ok))
+        return self.progress.ok
 
     # -------------------------------------------------- 边分析边分类（首屏图表）
 
@@ -279,7 +337,19 @@ class Library:
             blk["cast"] = cast_ctx
         self.store.set_meta("calibration", calib)
 
-        groups = group.build_groups(rows)
+        # 分组：有足够照片向量就用向量（完全连接），否则退回 pHash（单链）。
+        #
+        # 这不是口味问题。pHash 只看低频谱结构，同一个人换个动作它就认不出：
+        # 实测相邻 60 秒的照片对，pHash 距离中位数 26（阈值 10），
+        # 而向量余弦中位数 0.87。覆盖不到八成时退回 pHash，总比空着强。
+        ids, mat = self.store.load_vectors(config.EMBED_MODEL)
+        vec_of: dict[int, np.ndarray] = {}
+        if len(ids) >= max(8, int(len(rows) * 0.8)):
+            vec_of = {pid: mat[i] for i, pid in enumerate(ids)}
+        if vec_of:
+            groups = group.build_groups_vec(rows, vec_of)
+        else:
+            groups = group.build_groups(rows)
         group.rank_groups(rows, face_index, groups)
 
         # 键必须是照片 id，不是 rows 里的下标。
@@ -331,6 +401,10 @@ class Library:
                 self.progress.update(phase="cancelled", message="已取消")
                 return
 
+            # 特征要排在 recompute 之前：分组要用它们。没有模型时这一步立刻
+            # 返回 0，分组自动走 pHash。
+            self.embed_pending()
+
             self.recompute()
             self.progress.update(phase="done", finished=time.time(),
                                  message="分析完成，用时 {:.1f} 秒".format(time.time() - t0))
@@ -347,6 +421,35 @@ class Library:
         self._thread.start()
         return True
 
+    def embedding(self) -> bool:
+        """补向量那一遍还在跑吗。"""
+        return bool(self._embed_thread and self._embed_thread.is_alive())
+
+    def start_embed(self) -> bool:
+        """只补向量，不重跑分析。下完模型或换了模型时用。"""
+        if self.embedding():
+            return False
+        self._cancel.clear()
+        self._embed_thread = threading.Thread(target=self._embed_only, daemon=True)
+        self._embed_thread.start()
+        return True
+
+    def _embed_only(self):
+        """补完向量要顺手重算分组，否则界面上的相似组还是 pHash 那套旧的。"""
+        t0 = time.time()
+        try:
+            n = self.embed_pending()
+            if n:
+                self.progress.update(phase="evaluate", done=0, total=0,
+                                     message="按画面内容分组…")
+                self.recompute()
+            self.progress.update(phase="done", finished=time.time(),
+                                 message="画面特征完成 · {} 张 · {:.0f} 秒".format(
+                                     n, time.time() - t0))
+        except Exception as e:
+            self.progress.update(phase="error",
+                                 message="{}: {}".format(type(e).__name__, e))
+
     def cancel(self):
         self._cancel.set()
 
@@ -359,5 +462,7 @@ class Library:
             "SELECT COUNT(*) n FROM photos WHERE analysis_version>=?",
             (config.ANALYSIS_VERSION,)).fetchone()["n"]
         return {"total": total, "analyzed": analyzed, "decisions": c}
+
+
 
 

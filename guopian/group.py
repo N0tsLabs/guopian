@@ -8,6 +8,8 @@ cancels out. See docs/05 §2.2.
 
 from __future__ import annotations
 
+import numpy as np
+
 from . import config, phash
 
 
@@ -78,6 +80,62 @@ def _same_subject(a: dict, b: dict) -> bool:
     return not ((fa >= 2 and fb == 0) or (fb >= 2 and fa == 0))
 
 
+def build_groups_vec(rows: list[dict], vec_of: dict[int, "np.ndarray"],
+                     window: float | None = None, cosine: float | None = None,
+                     max_size: int | None = None) -> list[dict]:
+    """用照片向量分组，**完全连接**：组里任意两张都必须够像。
+
+    和 pHash 那套（并查集/单链聚合）是两种东西。单链的毛病是能"借道"：
+    A 像 B、B 像 C，A 和 C 就成了一组 —— 实测会把上百张串成一组，里面既有
+    双人合影也有空景。完全连接堵掉这条路：一张照片要么和组里每一张都够像，
+    要么自己开一组。
+
+    阈值不是猜的（evaluation/mnet_edges.py 在两个真实库上逐图核过）：
+    0.85 时"组内最弱的 16 对"全部是同一场景的不同动作，没有错并；
+    调高会把"全身 vs 特写"拆开，调低会把不相干的场景并进来。
+
+    时间窗给到 10 分钟：同一个机位可能隔几分钟才再拍一张，30 秒太紧。
+    组内上限 24：一段十分钟的拍摄不该被切成十几个 12 张的小组。
+
+    `vec_of` 里没有的照片（还没算向量）自成一組，不会掉出列表。
+    """
+    window = config.EMBED_WINDOW_SEC if window is None else window
+    cosine = config.EMBED_COSINE if cosine is None else cosine
+    max_size = config.GROUP_MAX if max_size is None else max_size
+
+    n = len(rows)
+    taken = [False] * n
+    groups: list[dict] = []
+    gid = 0
+    for i in range(n):
+        if taken[i]:
+            continue
+        taken[i] = True
+        a = rows[i]
+        members = [i]
+        if vec_of.get(a["id"]) is not None:
+            for j in range(i + 1, n):
+                if taken[j]:
+                    continue
+                b = rows[j]
+                dt = (b.get("taken_ts") or 0.0) - (a.get("taken_ts") or 0.0)
+                if dt > window:
+                    break                      # 时间有序，后面的只会更远
+                if len(members) >= max_size:
+                    break
+                if not _comparable(a, b) or not _same_subject(a, b):
+                    continue
+                vb = vec_of.get(b["id"])
+                if vb is None:
+                    continue
+                if all(float(vb @ vec_of[rows[m]["id"]]) >= cosine for m in members):
+                    members.append(j)
+                    taken[j] = True
+        gid += 1
+        groups.append(_finish(gid, members, rows))
+    return groups
+
+
 def build_groups(rows: list[dict]) -> list[dict]:
     """`rows` must be sorted by taken_ts. Returns membership + duplicate marks."""
     n = len(rows)
@@ -107,34 +165,43 @@ def build_groups(rows: list[dict]) -> list[dict]:
 
     groups: list[dict] = []
     for gid, members in enumerate(buckets.values(), start=1):
-        sub = [rows[i] for i in members]
-
-        # Exact duplicates: same image imported/stored twice. That means
-        # identical pixel dimensions plus a near-identical hash -- a plain
-        # hash match alone also fires on two different frames of one scene.
-        dup_of: dict[int, str] = {}
-        order = sorted(range(len(sub)), key=lambda k: -(sub[k].get("size") or 0))
-        for a_pos, a in enumerate(order):
-            if members[a] in dup_of:
-                continue
-            for b in order[:a_pos]:
-                if (sub[a].get("width") != sub[b].get("width") or
-                        sub[a].get("height") != sub[b].get("height")):
-                    continue
-                if phash.hamming(sub[a].get("phash"), sub[b].get("phash")) <= config.PHASH_DUP:
-                    dup_of[members[a]] = sub[b].get("name") or ""
-                    break
-
-        groups.append({
-            "gid": gid,
-            "members": members,
-            "exact_dup_of": dup_of,
-            "scores": {},
-            "rank": {m: 1 for m in members},
-            "best": None,
-            "best_score": 0.0,
-        })
+        groups.append(_finish(gid, members, rows))
     return groups
+
+
+def _finish(gid: int, members: list[int], rows: list[dict]) -> dict:
+    """一个组的收尾：标出精确重复、填好待排名字段。
+
+    两条分组路径（pHash 和照片向量）都走这里。分开写会让"什么算重复"各写
+    一遍，然后悄悄漂开 —— 而这两套结果在界面上是同一个东西。
+    """
+    sub = [rows[i] for i in members]
+
+    # Exact duplicates: same image imported/stored twice. That means identical
+    # pixel dimensions plus a near-identical hash -- a plain hash match alone
+    # also fires on two different frames of one scene.
+    dup_of: dict[int, str] = {}
+    order = sorted(range(len(sub)), key=lambda k: -(sub[k].get("size") or 0))
+    for a_pos, a in enumerate(order):
+        if members[a] in dup_of:
+            continue
+        for b in order[:a_pos]:
+            if (sub[a].get("width") != sub[b].get("width") or
+                    sub[a].get("height") != sub[b].get("height")):
+                continue
+            if phash.hamming(sub[a].get("phash"), sub[b].get("phash")) <= config.PHASH_DUP:
+                dup_of[members[a]] = sub[b].get("name") or ""
+                break
+
+    return {
+        "gid": gid,
+        "members": members,
+        "exact_dup_of": dup_of,
+        "scores": {},
+        "rank": {m: 1 for m in members},
+        "best": None,
+        "best_score": 0.0,
+    }
 
 
 # ------------------------------------------------------------------ scoring
@@ -246,3 +313,4 @@ def rank_groups(rows: list[dict], face_index: dict[int, list[dict]],
         if order:
             g["best"] = members[order[0]]
             g["best_score"] = round(best_score, 4)
+
