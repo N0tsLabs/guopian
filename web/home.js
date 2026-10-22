@@ -288,9 +288,16 @@ const Home = (() => {
     }
   }
 
-  /* ───────────────────── 文件夹浏览器 ───────────────────── */
+  /* ───────────────────── 文件夹浏览器 ─────────────────────
 
-  const B = { cur: null, roots: [], picked: null, home: '' };
+     列表和计数是分开的两件事。
+     列出目录只 scandir 一次（几毫秒），而"这个文件夹里有几张照片"要递归走
+     整棵树 —— 以前两件事在同一个请求里做，点一下 D 盘就要把 D 盘连同每个
+     子目录都数一遍（SteamLibrary 一个就 154 ms，冷缓存要几秒），看着就像在
+     扫描。现在列表立刻出来，数字按行懒问、边到边填，填完再排一次序。 */
+
+  const B = { cur: null, roots: [], picked: null, home: '', seq: 0,
+              counts: new Map(), curPhotos: null };
 
   async function openBrowser(startPath) {
     $('#browser').classList.remove('hidden');
@@ -305,6 +312,65 @@ const Home = (() => {
     await navigate(startPath || B.home);
   }
 
+  async function countPhotos(path) {
+    if (B.counts.has(path)) return B.counts.get(path);
+    try {
+      const r = await api('/api/fs/count?path=' + encodeURIComponent(path));
+      const n = r.photos | 0;
+      B.counts.set(path, n);
+      return n;
+    } catch (e) { return null; }
+  }
+
+  /** 把这一屏的数字填上；并发 4，切目录就作废（seq 变了直接退出）。 */
+  async function fillCounts(d, seq) {
+    const targets = [{ path: d.path, set: n => { B.curPhotos = n; syncOpenButton(); } }]
+      .concat(d.dirs.map(x => ({ path: x.path, set: n => { x.photos = n; } })));
+    let at = 0;
+    const worker = async () => {
+      while (at < targets.length) {
+        const t = targets[at++];
+        const n = await countPhotos(t.path);
+        if (seq !== B.seq) return;
+        if (n != null) t.set(n);
+        renderDirs(d);
+        if (t.path === d.path) syncOpenButton();
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, targets.length) }, worker));
+    if (seq !== B.seq) return;
+    // 到齐了按"有照片的排前面"重排一次。只排这一下：边到边排会让行来回跳。
+    d.dirs.sort((a, b) => (((b.photos || 0) > 0) - ((a.photos || 0) > 0))
+      || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    renderDirs(d);
+    syncOpenButton();
+  }
+
+  function syncOpenButton() {
+    const btn = $('#browserOpen');
+    if (btn) btn.textContent = B.curPhotos ? `打开这个文件夹（${B.curPhotos} 张）`
+                                          : '打开这个文件夹';
+  }
+
+  async function navigate(path) {
+    let d;
+    try { d = await api('/api/fs/list' + (path ? '?path=' + encodeURIComponent(path) : '')); }
+    catch (e) { toast('无法读取这个文件夹', 'err'); return; }
+    if (d.error) { toast(d.error, 'err'); }
+
+    const seq = ++B.seq;
+    B.cur = d.path;
+    B.picked = d.path;
+    B.curPhotos = B.counts.has(d.path) ? B.counts.get(d.path) : null;
+    renderCrumbs(d.path);
+    renderDirs(d);                       // 立刻画：名字已经在手里了
+    $('#pickedPath').textContent = d.path;
+    $('#pickedPath').title = d.path;
+    syncOpenButton();
+    fillCounts(d, seq);                  // 数字慢慢补
+    return d;
+  }
+
   function closeBrowser() {
     $('#browser').classList.add('hidden');
   }
@@ -317,27 +383,6 @@ const Home = (() => {
     $('#roots').querySelectorAll('.rootChip').forEach(el => {
       el.onclick = () => navigate(B.roots[+el.dataset.i].path);
     });
-  }
-
-  async function navigate(path) {
-    let d;
-    try { d = await api('/api/fs/list' + (path ? '?path=' + encodeURIComponent(path) : '')); }
-    catch (e) { toast('无法读取这个文件夹', 'err'); return; }
-    if (d.error) { toast(d.error, 'err'); }
-
-    B.cur = d.path;
-    B.picked = d.path;
-    renderCrumbs(d.path);
-    renderDirs(d);
-    $('#pickedPath').textContent = d.path;
-    $('#pickedPath').title = d.path;
-    const canOpen = d.photos > 0 || d.dirs.some(x => x.photos > 0);
-    const btn = $('#browserOpen');
-    btn.disabled = false;
-    btn.textContent = d.photos > 0
-      ? `打开这个文件夹（${d.photos} 张）`
-      : '打开这个文件夹';
-    return d;
   }
 
   function renderCrumbs(path) {
@@ -358,6 +403,9 @@ const Home = (() => {
   }
 
   function renderDirs(d) {
+    // photos 还没问到就是 null：行照样画，数字位显示"…"，问到再填。
+    // 不要因为它未知就藏起来 —— 那会让列表先"少一半"再"变多"。
+    const unknown = d.photos == null;
     const rows = [];
     if (d.parent) {
       rows.push(`<button class="dirRow up" data-p="${esc(d.parent)}">
@@ -366,31 +414,32 @@ const Home = (() => {
           <path d="M12 19V5M5 12l7-7 7 7"/></svg></span>
         <span class="nm">上一级</span></button>`);
     }
-    if (d.photos > 0) {
-      rows.push(`<button class="dirRow has" data-p="${esc(d.path)}">
+    if (unknown || d.photos > 0) {
+      rows.push(`<button class="dirRow ${unknown ? '' : 'has'}" data-p="${esc(d.path)}" data-self="1">
         <span class="ico"><svg viewBox="0 0 24 24" width="17" height="17" fill="none"
           stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
           <rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="8.7" cy="9.6" r="1.6"/>
           <path d="M4 16.5l4.6-4.3 3.5 3.2 3-2.7 4.9 4.3"/></svg></span>
         <span class="nm">就用这个文件夹</span>
-        <span class="cnt">${d.photos} 张照片</span></button>`);
+        <span class="cnt">${unknown ? '…' : d.photos + ' 张照片'}</span></button>`);
     }
     for (const sub of d.dirs) {
-      rows.push(`<button class="dirRow ${sub.photos ? 'has' : ''}" data-p="${esc(sub.path)}">
+      const known = sub.photos != null;
+      rows.push(`<button class="dirRow ${known && sub.photos ? 'has' : ''}" data-p="${esc(sub.path)}">
         <span class="ico"><svg viewBox="0 0 24 24" width="17" height="17" fill="none"
           stroke="currentColor" stroke-width="1.8"><path d="M3 7.5A2 2 0 0 1 5 5.5h3.6a2 2 0 0 1 1.5.7l1 1.3H19a2 2 0 0 1 2 2v7A2 2 0 0 1 19 18.5H5a2 2 0 0 1-2-2z"/></svg></span>
         <span class="nm">${esc(sub.name)}</span>
-        <span class="cnt">${sub.photos ? sub.photos + ' 张' : ''}</span></button>`);
+        <span class="cnt">${known ? (sub.photos ? sub.photos + ' 张' : '') : '…'}</span></button>`);
     }
     $('#dirList').innerHTML = rows.length ? rows.join('')
       : '<div class="dirEmpty">这个文件夹是空的，也没有子文件夹</div>';
     $('#dirList').querySelectorAll('.dirRow').forEach(el => {
       el.onclick = () => {
-        if (el.classList.contains('up') || !el.classList.contains('has')) {
-          navigate(el.dataset.p);
-        } else if (el.querySelector('.nm').textContent === '就用这个文件夹') {
+        if (el.dataset.self === '1') {
           openLibrary(el.dataset.p, $('#roToggle').checked);
           closeBrowser();
+        } else if (el.classList.contains('up') || !el.classList.contains('has')) {
+          navigate(el.dataset.p);
         } else {
           navigate(el.dataset.p);
         }

@@ -350,6 +350,11 @@ def _photo_count(path: str, cap: int = 5000) -> int:
 
     The quarantine folder is skipped, so the count reflects what you would
     actually open, not what has already been set aside.
+
+    This walks the tree, so it is NEVER called inline while listing a folder:
+    listing D:\\ used to walk D:\\ *and* every child (SteamLibrary alone was
+    154 ms warm, seconds cold), which is why clicking a drive looked like it was
+    scanning. See photo_count_cached / fs_count.
     """
     n = 0
     # Only the quarantine folder. The three decision folders ARE the photos --
@@ -364,6 +369,112 @@ def _photo_count(path: str, cap: int = 5000) -> int:
                 if n >= cap:
                     return n
     return n
+
+
+_COUNT_CACHE: dict[str, tuple[float, int]] = {}
+_COUNT_CACHE_TTL = 300.0          # 5 分钟：够挡住来回点，又不至于看不到新导入的照片
+_COUNT_CACHE_LOCK = threading.Lock()
+
+
+def photo_count_cached(path: str) -> int:
+    """_photo_count with a short cache. Called once per folder row, on demand."""
+    now = time.time()
+    with _COUNT_CACHE_LOCK:
+        hit = _COUNT_CACHE.get(path)
+        if hit and now - hit[0] < _COUNT_CACHE_TTL:
+            return hit[1]
+    try:
+        n = _photo_count(path)
+    except OSError:
+        n = 0
+    with _COUNT_CACHE_LOCK:
+        _COUNT_CACHE[path] = (now, n)
+        if len(_COUNT_CACHE) > 4000:          # 别让缓存自己变成内存泄漏
+            for k in list(_COUNT_CACHE)[:1000]:
+                _COUNT_CACHE.pop(k, None)
+    return n
+
+
+def fs_count(path: str | None) -> dict:
+    """How many photos are in this folder (recursive). Asked lazily, per row."""
+    if not path:
+        return {"path": "", "photos": 0}
+    p = os.path.abspath(os.path.expanduser(path))
+    return {"path": p, "photos": photo_count_cached(p)}
+
+
+# 这些目录要么是系统的，要么是回收站/缓存：列出来只会让人误点
+_SKIP_DIRS = {
+    "$RECYCLE.BIN", "$Recycle.Bin", "System Volume Information", "$WinREAgent",
+    "Recovery", "Config.Msi", "node_modules", "__pycache__",
+}
+
+
+def fs_list_fast(path: str | None, with_counts: bool = False) -> dict:
+    """Directory listing for the in-app folder browser.
+
+    Deliberately cheap: names and paths only. Counting photos is a recursive
+    walk, so it is asked for separately per row (fs_count) and filled in as the
+    answers arrive. `with_counts=True` is kept for tests and for callers that
+    really do want one blocking pass.
+    """
+    if not path:
+        return fs_list_fast(os.path.expanduser("~"), with_counts)
+
+    path = os.path.abspath(os.path.expanduser(path))
+    if os.path.isfile(path):
+        path = os.path.dirname(path)
+
+    result: dict = {
+        "path": path,
+        "name": os.path.basename(path.rstrip("\\/")) or path,
+        "parent": None,
+        "photos": None if not with_counts else 0,
+        "dirs": [],
+        "error": None,
+    }
+
+    parent = os.path.dirname(path.rstrip("\\/"))
+    if parent and parent != path and os.path.isdir(parent):
+        result["parent"] = parent
+
+    t0 = time.time()
+    try:
+        entries = list(os.scandir(path))
+    except PermissionError:
+        result["error"] = "没有权限读取这个文件夹"
+        return result
+    except OSError as e:
+        result["error"] = str(e)
+        return result
+
+    dirs = []
+    for e in entries:
+        try:
+            if not e.is_dir(follow_symlinks=False):
+                continue
+        except OSError:
+            continue
+        if e.name.startswith(".") or e.name in _SKIP_DIRS:
+            continue
+        if e.name == config.TRASH_DIR_NAME:
+            continue
+        dirs.append(e.name)
+
+    if with_counts:
+        result["photos"] = photo_count_cached(path)
+
+    detailed = []
+    for name in sorted(dirs, key=str.lower):
+        full = os.path.join(path, name)
+        detailed.append({"name": name, "path": full,
+                         "photos": photo_count_cached(full) if with_counts else None})
+    if with_counts:
+        # folders that actually contain photos float to the top
+        detailed.sort(key=lambda d: (0 if d["photos"] else 1, d["name"].lower()))
+    result["dirs"] = detailed
+    result["list_ms"] = round((time.time() - t0) * 1000, 1)
+    return result
 
 
 def fs_roots() -> list[dict]:
@@ -396,59 +507,13 @@ def fs_roots() -> list[dict]:
     return out
 
 
-def fs_list(path: str | None) -> dict:
-    """Directory listing for the in-app folder browser."""
-    if not path:
-        home = os.path.expanduser("~")
-        return fs_list(home)
+def fs_list(path: str | None, with_counts: bool = False) -> dict:
+    """Directory listing for the in-app folder browser.
 
-    path = os.path.abspath(os.path.expanduser(path))
-    if os.path.isfile(path):
-        path = os.path.dirname(path)
-
-    result: dict = {
-        "path": path,
-        "name": os.path.basename(path.rstrip("\\/")) or path,
-        "parent": None,
-        "photos": 0,
-        "dirs": [],
-        "error": None,
-    }
-
-    parent = os.path.dirname(path.rstrip("\\/"))
-    if parent and parent != path and os.path.isdir(parent):
-        result["parent"] = parent
-
-    try:
-        entries = list(os.scandir(path))
-    except PermissionError:
-        result["error"] = "没有权限读取这个文件夹"
-        return result
-    except OSError as e:
-        result["error"] = str(e)
-        return result
-
-    dirs = []
-    for e in entries:
-        try:
-            if not e.is_dir(follow_symlinks=False):
-                continue
-        except OSError:
-            continue
-        if e.name.startswith(".") or e.name in (config.TRASH_DIR_NAME,):
-            continue
-        dirs.append(e.name)
-
-    result["photos"] = _photo_count(path)
-
-    detailed = []
-    for name in sorted(dirs, key=str.lower):
-        full = os.path.join(path, name)
-        detailed.append({"name": name, "path": full, "photos": _photo_count(full)})
-    # folders that actually contain photos float to the top
-    detailed.sort(key=lambda d: (0 if d["photos"] else 1, d["name"].lower()))
-    result["dirs"] = detailed
-    return result
+    这是便宜的那一个：只 scandir，不数照片（数照片是递归走树，见 fs_count）。
+    曾经它内部递归数照片，点一下盘符就要把整个盘连子目录数一遍，看着像在扫描。
+    """
+    return fs_list_fast(path, with_counts)
 
 
 # ------------------------------------------------------------------ session
@@ -526,3 +591,4 @@ class Session:
     def require(self) -> Library | None:
         with self.lock:
             return self.lib
+

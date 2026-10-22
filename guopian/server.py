@@ -271,6 +271,12 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
     def fs_list():
         return jsonify(session_mod.fs_list(request.args.get("path")))
 
+    @app.get("/api/fs/count")
+    def fs_count():
+        """一个目录里有多少张照片（递归）。文件夹浏览器按行懒问这个，
+        所以列出目录本身不用等任何扫描。"""
+        return jsonify(session_mod.fs_count(request.args.get("path")))
+
     # ---------------------------------------------------------- library state
     @app.get("/api/state")
     def state():

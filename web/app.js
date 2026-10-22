@@ -758,6 +758,11 @@ async function applyDialog() {
 }
 
 async function doApply(mode) {
+  // 移动文件是按请求同步做的：几百张跨目录移动要几秒。期间必须给个反馈，
+  // 否则按钮按下去"没反应"，人会再点一次。禁用它 + 换个文案就够。
+  const go = $('#apGo');
+  const label = go ? go.textContent : '';
+  if (go) { go.disabled = true; go.textContent = '正在移动…'; }
   try {
     const r = await api('/api/apply', { method: 'POST', body: JSON.stringify({ mode, confirm: true }) });
     if (!r.ok) { toast(r.error || '失败', 'err'); return; }
@@ -766,7 +771,11 @@ async function doApply(mode) {
     await loadQueue();
     loadState();
     showRollback(r.batch, r.moved);
-  } catch (e) { toast('失败', 'err'); }
+  } catch (e) {
+    toast('失败', 'err');
+  } finally {
+    if (go) { go.disabled = false; go.textContent = label; }
+  }
 }
 
 function showRollback(batch, n) {
