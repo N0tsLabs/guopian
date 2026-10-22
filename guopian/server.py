@@ -966,6 +966,16 @@ def serve(sess: Session, host: str = "127.0.0.1", port: int = 8765,
     """
     app = create_app(sess, open_browser, port, dev=dev)
     url = "http://{}:{}".format(host, port)
+    # 启动时若已经打开了某个库（`guopian.exe "D:\Photos"`），窗口就该直接开在
+    # 它的项目地址上。否则地址栏写着首页、屏幕上是项目，一刷新行为说不清。
+    start = "/"
+    try:
+        if sess.lib is not None:
+            start = "/p/" + paths.slug(sess.lib.root)
+    except Exception:
+        start = "/"
+    if start != "/":
+        url = url + start
 
     print("\n  过片 Guopian  ->  {}".format(url))
     if dev:

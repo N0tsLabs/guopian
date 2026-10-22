@@ -75,10 +75,23 @@ const Home = (() => {
 
     renderRecent(data.recent || []);
 
-    // A project URL wins over everything: reloading /p/<slug> must land you
-    // back in that project, not on the home screen.
+    // 地址栏说了算。
+    //
+    // 以前这里还有一条"服务端已经有打开的库就直接进去"，本意是"双击文件夹
+    // 启动"那条路径，代价是：在项目里按了回首页、或者地址栏敲回 /，只要
+    // 服务端还留着那个库（分析还在跑、或者只是没关），一刷新就又进去了 ——
+    // 地址栏写着首页，屏幕上是项目，怎么刷新都回不去。
+    //
+    // 现在只有 /p/<slug> 会自动进项目。启动时如果带了文件夹参数，
+    // run.py 会让窗口直接开在 /p/<slug>，那条路径照旧。
     const wantSlug = slugFromURL();
-    if (wantSlug && !(data.current && data.current.root)) {
+    if (wantSlug) {
+      if (data.current && data.current.slug === wantSlug) {
+        // 服务端开着的正是 URL 指的那个库：走统一入口（还在分析就先过整页
+        // 进度），别重新开一遍。
+        enter();
+        return true;
+      }
       const r = (data.recent || []).find(x => x.slug === wantSlug);
       if (r) { openLibrary(r.path); return true; }
       // The slug is not in the recent list any more -- forget it rather than
@@ -91,15 +104,6 @@ const Home = (() => {
     // explain what the app does, not demand they pick photos.
     if (!(data.recent || []).length && !data.current && !Tour.seen()) {
       Tour.open({ hasLibrary: !!data.current, onExit: () => refresh() });
-      return true;
-    }
-
-    // If a library is already open (e.g. the user passed a folder on the
-    // command line, or reloaded the window), go straight to it.
-    if (data.current && data.current.root) {
-      // 走统一入口：还在分析的话先进首屏（整页进度 + 分类图表），
-      // 分析完再进过图 —— 否则会看到一个一半的队列，而且建议还没算出来。
-      enter();
       return true;
     }
     return false;
