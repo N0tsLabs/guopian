@@ -197,6 +197,16 @@ code{font:400 11.5px var(--mono);color:var(--ink-2);
 
 .view{position:fixed;inset:0;display:flex;flex-direction:column}
 
+/* 切视图的交叉淡入淡出。只动 opacity —— 加 transform 会让 app.js 量出来的
+   照片框尺寸变成缩放后的值（见 core.js 里的说明）。 */
+.view.view-entering{animation:viewIn .19s ease-out both}
+.view.view-leaving{opacity:0;transition:opacity .19s ease-in;pointer-events:none}
+@keyframes viewIn{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion: reduce){
+  .view.view-entering{animation:none}
+  .view.view-leaving{transition:none}
+}
+
 /* ═══════════════════ 首次分析：进度 + 分类图表 ═══════════════════
 
    一个居中的卡片，宽度按内容定（上限 720px）：图表要有横向空间才读得出
@@ -262,6 +272,14 @@ code{font:400 11.5px var(--mono);color:var(--ink-2);
   margin-top:var(--s5);padding-top:var(--s4);border-top:1px solid var(--line);
   font-size:11.5px;
 }
+
+/* 移出项目列表时的两个选项：竖排、左右对齐，各自说清代价 */
+.fgChoice{display:flex;flex-direction:column;gap:var(--s2);margin:var(--s4) 0}
+.fgChoice .btn{
+  flex-direction:column;align-items:flex-start;gap:2px;
+  text-align:left;padding:var(--s3) var(--s4);height:auto;line-height:1.5;
+}
+.fgChoice .btn b{font-weight:600;color:var(--ink)}
 
 /* ═══════════════════════════════ top bar ═══════════════════════════════ */
 

@@ -77,12 +77,39 @@ const G = (() => {
    文件头那一行就完整说明了"这个模块用到 core 的哪一样"。 */
 const { $, $$, api, toast, esc, sleep, fmtCount, setLibSlug, imgUrl } = G;
 
-/* ═══════════════════════════════ 视图切换 ═══════════════════════════════ */
+/* ═══════════════════════════════ 视图切换 ═══════════════════════════════
+
+   切页面时做一个交叉淡入淡出：新的淡进来，旧的淡出去，而不是硬切。
+
+   为什么只动 opacity、不动 transform：app.js 会在渲染后量 #cardWrap 的
+   尺寸（fitStage）。如果给整个视图加 transform，后代的 getBoundingClientRect
+   会返回被缩放后的值，照片框就会算错 —— 而且只在动画那 200 毫秒里算错，
+   平时看不出来，放大缩小才发现不对。
+
+   旧的视图要留到淡出结束才 hidden，所以这期间两个 position:fixed 的视图
+   是叠着的；给淡出的那个关掉 pointer-events，否则它会吃掉点击。 */
+
+const VIEW_IDS = ['homeView', 'bootView', 'appView', 'gridView'];
+const FADE_MS = 190;
 
 const Views = {
   show(name) {
-    ['homeView', 'bootView', 'appView', 'gridView'].forEach(id => {
-      G.$('#' + id).classList.toggle('hidden', id !== name);
+    VIEW_IDS.forEach(id => {
+      const el = G.$('#' + id);
+      if (!el) return;
+      if (id === name) {
+        el.classList.remove('hidden', 'view-leaving');
+        el.classList.remove('view-entering');
+        void el.offsetWidth;                    // 重新触发一轮动画
+        el.classList.add('view-entering');
+        setTimeout(() => el.classList.remove('view-entering'), FADE_MS + 40);
+      } else if (!el.classList.contains('hidden') && !el.classList.contains('view-leaving')) {
+        el.classList.add('view-leaving');
+        setTimeout(() => {
+          el.classList.add('hidden');
+          el.classList.remove('view-leaving');
+        }, FADE_MS);
+      }
     });
   },
 };

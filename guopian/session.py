@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import string
 import threading
 import time
@@ -271,13 +272,98 @@ def remember(path: str) -> None:
     save_prefs(p)
 
 
-def forget(path: str) -> None:
+def forget(path: str, delete_data: bool = False, live_lib=None) -> dict:
+    """Drop a library from the home list, optionally deleting its data.
+
+    "从列表移除" and "删掉这个项目" 是两件事，以前只有前者，而且名字叫 ✕，
+    看起来像后者 —— 用户点了 ✕ 以为数据没了，重新打开却发现"秒开、还带着
+    上次的分析结果"，自然会怀疑是不是缓存没清。
+
+    所以这里拆成两个动作：
+      delete_data=False  只从最近列表拿掉，catalog（分析结果 + 缩略图）保留，
+                         下次打开仍然秒开。
+      delete_data=True   连 catalog 一起删掉。下次打开会重新扫描、重新分析，
+                         也就是用户说的"删掉全部数据"。
+
+    Windows 上目录里有打开的 SQLite 句柄就删不掉，所以删之前必须先把连接放掉：
+    调用方传进来的 live_lib（当前打开的那个）、后台挂着的分析线程，都先关。
+    rmtree 之后还要确认目录真的没了 —— 否则界面会说"已删除"而数据还在，
+    那比不删更糟。
+    """
+    freed = 0
+    removed = True
+    if delete_data:
+        catalog = paths.catalog_dir(path)
+
+        if live_lib is not None:
+            try:
+                live_lib.cancel()
+                live_lib.store.close()
+            except Exception:
+                pass
+
+        for key, lib in list(_DETACHED.items()):
+            try:
+                if os.path.abspath(getattr(lib, "root", "")) == os.path.abspath(path):
+                    lib.cancel()
+                    lib.store.close()
+                    _DETACHED.pop(key, None)
+            except Exception:
+                _DETACHED.pop(key, None)
+
+        if os.path.isdir(catalog):
+            try:
+                freed = _dir_size(catalog)
+            except OSError:
+                freed = 0
+            _rmtree_retry(catalog)
+            removed = not os.path.exists(catalog)
+
     p = load_prefs()
     p["recent"] = [r for r in p.get("recent", [])
                    if (r.get("path") if isinstance(r, dict) else r) != path]
     if p.get("last_folder") == path:
         p["last_folder"] = None
     save_prefs(p)
+    return {"freed": freed, "removed": removed}
+
+
+def _rmtree_retry(path: str, attempts: int = 4) -> None:
+    """刚关掉的 sqlite 句柄在 Windows 上要几毫秒才真正释放，删早了会 PermissionError。"""
+    import gc
+
+    for i in range(attempts):
+        gc.collect()
+        try:
+            shutil.rmtree(path)
+            return
+        except FileNotFoundError:
+            return
+        except OSError:
+            time.sleep(0.12 * (i + 1))
+    shutil.rmtree(path, ignore_errors=True)
+
+
+def catalog_size(path: str) -> dict:
+    """这个项目的分析数据占了多大（数据库 + 缩略图）。"""
+    d = paths.catalog_dir(path)
+    if not os.path.isdir(d):
+        return {"bytes": 0, "exists": False}
+    try:
+        return {"bytes": _dir_size(d), "exists": True}
+    except OSError:
+        return {"bytes": 0, "exists": True}
+
+
+def _dir_size(root: str) -> int:
+    total = 0
+    for dirpath, _dirnames, filenames in os.walk(root):
+        for f in filenames:
+            try:
+                total += os.path.getsize(os.path.join(dirpath, f))
+            except OSError:
+                pass
+    return total
 
 
 def _catalog_stats(photo_root: str) -> dict:
@@ -591,4 +677,5 @@ class Session:
     def require(self) -> Library | None:
         with self.lock:
             return self.lib
+
 

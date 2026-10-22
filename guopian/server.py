@@ -258,8 +258,29 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
     @app.post("/api/forget")
     def forget():
         body = request.get_json(force=True) or {}
-        session_mod.forget(body.get("path", ""))
-        return jsonify({"ok": True, "recent": session_mod.recent_libraries()})
+        path = body.get("path", "")
+        wipe = bool(body.get("delete_data"))
+        # 要删数据的话，先把当前打开/挂着的库放掉，否则 Windows 上 SQLite 的
+        # 句柄会让目录删不掉。close() 会把当前库挪进 _DETACHED，这里直接取出来。
+        live = None
+        if wipe:
+            with sess.lock:
+                if sess.lib is not None and os.path.abspath(sess.lib.root) == os.path.abspath(path):
+                    live = sess.lib
+                    sess.lib = None
+                    sess.generation += 1
+        res = session_mod.forget(path, wipe, live_lib=live)
+        out = {"ok": True, "freed": res.get("freed", 0),
+               "recent": session_mod.recent_libraries()}
+        if wipe and not res.get("removed", True):
+            out["ok"] = False
+            out["error"] = "分析数据删不掉（可能还有别的程序占着），稍后再试一次"
+        return jsonify(out)
+
+    @app.get("/api/catalog/size")
+    def catalog_size():
+        """这个项目的分析数据占多大（确认框里要写清楚代价）。"""
+        return jsonify(session_mod.catalog_size(request.args.get("path", "")))
 
     # ---------------------------------------------------------- fs browser
     @app.get("/api/fs/roots")

@@ -196,12 +196,75 @@ const Home = (() => {
     });
   }
 
+  /** ✕ 其实是两件事，让用户自己选。
+   *
+   * 以前它只把项目从"最近打开"里拿掉，catalog（分析结果 + 缩略图）留在原处，
+   * 所以重新打开同一个文件夹会"秒开、还带着上次的结果" —— 看起来就像删了
+   * 没删干净。现在把两个意思分开：
+   *   只从列表移除   数据留着，下次打开不用重扫
+   *   连数据一起删   下次打开重新扫描（会先算一下占多大，写清楚代价）
+   */
+  async function forgetDialog(r) {
+    const modal = $('#modal');
+    const sheet = $('#sheet');
+    const nm = esc(r.name || r.path);
+    sheet.innerHTML = `
+      <h2>移出项目列表</h2>
+      <p><b>${nm}</b></p>
+      <p class="muted small">分析结果和缩略图存在一边，不在你的照片文件夹里；
+      这两件事的区别只在于要不要把它们也删掉。</p>
+      <div class="fgChoice">
+        <button class="btn ghost" id="fgKeep">
+          <b>只从列表移除</b>
+          <span class="muted small">保留分析数据 · 下次打开仍然秒开</span>
+        </button>
+        <button class="btn ghost" id="fgWipe">
+          <b>删除项目和分析数据</b>
+          <span class="muted small" id="fgSize">下次打开会重新扫描</span>
+        </button>
+      </div>
+      <div class="rowBtns"><button class="btn ghost" id="fgCancel">取消</button></div>`;
+    modal.classList.remove('hidden');
+
+    // 顺手算一下会释放多少空间，别让人盲选
+    api('/api/catalog/size?path=' + encodeURIComponent(r.path))
+      .then(s => {
+        const el = $('#fgSize');
+        if (!el) return;
+        el.textContent = s.bytes
+          ? `释放 ${(s.bytes / 1048576).toFixed(1)} MB · 下次打开会重新扫描`
+          : '下次打开会重新扫描';
+      })
+      .catch(() => {});
+
+    const done = () => { modal.classList.add('hidden'); refresh(); };
+    $('#fgCancel').onclick = () => modal.classList.add('hidden');
+    $('#fgKeep').onclick = async () => {
+      await api('/api/forget', { method: 'POST', body: JSON.stringify({ path: r.path }) });
+      toast('已从列表移除，分析数据还在');
+      done();
+    };
+    $('#fgWipe').onclick = async () => {
+      const btn = $('#fgWipe');
+      btn.disabled = true;
+      try {
+        const res = await api('/api/forget', {
+          method: 'POST', body: JSON.stringify({ path: r.path, delete_data: true }) });
+        const mb = res.freed ? (res.freed / 1048576).toFixed(1) + ' MB' : '';
+        toast(`已删除项目${mb ? '，释放 ' + mb : ''}，下次打开会重新扫描`);
+        done();
+      } catch (e) {
+        toast('删除失败', 'err');
+        btn.disabled = false;
+      }
+    };
+  }
+
   async function cardAction(act, r, card) {
     if (!r) return;
 
     if (act === 'forget') {
-      await api('/api/forget', { method: 'POST', body: JSON.stringify({ path: r.path }) });
-      refresh();
+      forgetDialog(r);
       return;
     }
 
