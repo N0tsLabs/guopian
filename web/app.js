@@ -163,6 +163,103 @@ function start() {
   showCoachOnce();
 }
 
+/* ───────────────────── 首次分析：进度 + 分类图表 ─────────────────────
+
+   打开一个还没分析过的文件夹时，先过这一道门：整页显示进度条和分类图表，
+   分析完再进入过图页面。为什么不让它边分析边过图 —— 因为分析没完成时
+   "建议过/不过"还没有（它要按整批照片的分布才有意义），先让人看一堆
+   半成品判断、再全部变一遍，比等一下更难受。
+
+   已有分析结果的库（重新打开）直接跳过，不弹这一屏。 */
+function needsBoot(st) {
+  if (!st || !st.counts) return false;
+  const total = st.counts.total || 0;
+  const analyzed = st.counts.analyzed || 0;
+  if (!total || analyzed >= total) return false;
+  // 没有任何进度且没有待分析项 = 打不开就算了，别把人锁在这一屏
+  const phase = (st.progress && st.progress.phase) || 'idle';
+  return phase !== 'idle' || analyzed < total;
+}
+
+async function runBoot(initial) {
+  Views.show('bootView');
+  bindBoot();
+  let st = initial;
+  renderBoot(st);
+  const deadline = Date.now() + 1000 * 60 * 60 * 6;   // 六小时，够扫一个硬盘
+  while (Date.now() < deadline) {
+    await wait(600);
+    try { st = await api('/api/state'); }
+    catch (e) { return; }                             // 库被关了之类，交给上层
+    renderBoot(st);
+    const phase = (st.progress && st.progress.phase) || 'idle';
+    const analyzed = (st.counts && st.counts.analyzed) || 0;
+    const total = (st.counts && st.counts.total) || 0;
+    const settled = ['done', 'error', 'cancelled'].includes(phase);
+    if (settled || (total && analyzed >= total && !st.progress.running)) return;
+  }
+}
+
+function bindBoot() {
+  if (S.bootBound) return;
+  S.bootBound = true;
+  const btn = $('#bootCancel');
+  if (btn) {
+    btn.onclick = async () => {
+      try { await api('/api/cancel', { method: 'POST', body: '{}' }); } catch (e) { /* 忽略 */ }
+      toast('已取消分析，剩下的照片下次打开再继续');
+    };
+  }
+}
+
+function renderBoot(st) {
+  if (!st) return;
+  const p = st.progress || {};
+  const total = p.total || (st.counts && st.counts.total) || 0;
+  const done = p.done || 0;
+  const pct = total ? Math.min(100, Math.round(done / total * 100)) : 0;
+
+  const name = (st.root || '').split(/[\\/]/).filter(Boolean).pop() || '';
+  $('#bootName').textContent = name;
+  $('#bootFill').style.width = pct + '%';
+
+  const bits = [`分析 ${done}/${total}`, `${pct}%`];
+  if (p.rate) bits.push(`${p.rate.toFixed(1)}/s`);
+  if (p.eta) bits.push(`剩 ~${fmtEta(p.eta)}`);
+  $('#bootSub').textContent = bits.join(' · ');
+
+  const msg = p.message || '';
+  const cur = p.current ? `正在处理 ${p.current}` : '';
+  $('#bootNums').textContent = [msg, cur].filter(Boolean).join('　');
+
+  const rows = (st.boot && st.boot.rows) || [];
+  const chart = $('#bootChart');
+  const empty = $('#bootChartEmpty');
+  empty.classList.toggle('hidden', rows.length > 0);
+  // 条形长度按当前最大的一类归一化：早期只有十几张时，绝对值都很小，
+  // 用百分比当分母会全部顶满，看不出差别。
+  const peak = rows.reduce((m, r) => Math.max(m, r.count), 0) || 1;
+  chart.innerHTML = rows.map(r => {
+    const w = Math.max(2, Math.round(r.count / peak * 100));
+    return `<div class="bootRow ${r.sev ? 'sev-' + r.sev : ''}">
+      <span class="lbl" title="${esc(r.label)}">${esc(r.label)}</span>
+      <span class="track"><i style="width:${w}%"></i></span>
+      <span class="num">${r.count}</span>
+    </div>`;
+  }).join('');
+}
+
+/** 打开库之后的统一入口：需要分析就先过首屏，否则直接进过图。 */
+async function enter() {
+  let st = null;
+  try { st = await api('/api/state'); } catch (e) { /* 交给 start 里再报 */ }
+  if (needsBoot(st)) await runBoot(st);
+  Views.show('appView');
+  start();
+}
+
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 function attach() {
   if (!S.running) { grab(); bind(); S.running = true; }
   loadState().then(loadQueue);
@@ -819,6 +916,7 @@ function configure(hooks) {
 }
 
 
-export { start, stop, attach, loadQueue, closeModal, setList, setLabels,
+export { enter, start, stop, attach, loadQueue, closeModal, setList, setLabels,
   configure, applyDefaults, ensureFaceModel
 };
+

@@ -81,7 +81,7 @@ const { $, $$, api, toast, esc, sleep, fmtCount, setLibSlug, imgUrl } = G;
 
 const Views = {
   show(name) {
-    ['homeView', 'appView', 'gridView'].forEach(id => {
+    ['homeView', 'bootView', 'appView', 'gridView'].forEach(id => {
       G.$('#' + id).classList.toggle('hidden', id !== name);
     });
   },

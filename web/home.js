@@ -27,7 +27,7 @@ import { G, Views, setLibSlug } from './core.js';
 import { S } from './state.js';
 import { Settings } from './settings.js';
 import { Tour } from './tour.js';
-import { start, stop, attach, setLabels, configure, applyDefaults } from './app.js';
+import { enter, start, stop, attach, setLabels, configure, applyDefaults } from './app.js';
 
 /* ═══════════════════════════════ 首页 ═══════════════════════════════ */
 
@@ -97,8 +97,9 @@ const Home = (() => {
     // If a library is already open (e.g. the user passed a folder on the
     // command line, or reloaded the window), go straight to it.
     if (data.current && data.current.root) {
-      Views.show('appView');
-      attach(data.current);
+      // 走统一入口：还在分析的话先进首屏（整页进度 + 分类图表），
+      // 分析完再进过图 —— 否则会看到一个一半的队列，而且建议还没算出来。
+      enter();
       return true;
     }
     return false;
@@ -279,8 +280,9 @@ const Home = (() => {
       const want = projectURL(PROJECTS.find(x => x.path === path));
       if (location.pathname === want) history.replaceState({}, '', want);
       else pushURL(want);
-      Views.show('appView');
-      start();
+      // 统一入口：新文件夹（还没分析过）会先过整页的进度 + 分类图表，
+      // 分析完自动进入过图；已经分析过的库直接进。
+      await enter();
     } catch (e) {
       toast((e.body && e.body.error) || e.message || '打开失败', 'err');
     }
@@ -497,3 +499,4 @@ configure({ onLibraryClosed: Home.refresh });
 /* 启动。写在模块体最后一行：此刻 import 图已经保证 core.js 和 app.js 都
    求值完毕，所以 boot() 里 await 回来的那一步调用 setLabels() 是安全的。 */
 Home.boot();
+

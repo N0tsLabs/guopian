@@ -277,18 +277,20 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
         lib, err = need_lib()
         if err:
             return err
+        prog = lib.progress.snap()
         return jsonify({
             "root": lib.root,
             "slug": paths.slug(lib.root),
             "work_dir": lib.work_dir,
             "read_only": bool(lib.read_only),
             "generation": sess.generation,
-            "progress": lib.progress.snap(),
+            "progress": prog,
             "counts": lib.counts(),
             "face_available": _faces_ok(),
             "calibration": lib.store.get_meta("calibration"),
             "issue_summary": _issue_summary(lib),
             "labels": _labels(),
+            "boot": _boot_block(lib, prog),
         })
 
     # ---------------------------------------------------------- models
@@ -754,6 +756,38 @@ def _faces_ok() -> dict:
 
     ok, msg = faces_mod.available()
     return {"ok": ok, "message": msg}
+
+
+def _boot_block(lib, prog: dict) -> dict:
+    """首屏（新文件夹分析中）用的数据：进度 + 分类计数。
+
+    分类来自 pipeline 边分析边统计的 buckets。口径和最终判定不完全一致
+    （开头还没有分布可标定，只能按绝对门槛分类），所以它只用来"看着有东西
+    在发生"；真正的分类以分析结束后的 issue_summary 为准。
+    """
+    from . import analyze as analyze_mod
+
+    buckets = prog.get("buckets") or {}
+    rows = []
+    for key, n in buckets.items():
+        if not n:
+            continue
+        if key == "face":
+            rows.append({"key": key, "label": "有人脸", "count": n, "order": 0})
+        elif key == "no_face":
+            rows.append({"key": key, "label": "没人脸", "count": n, "order": 1})
+        elif key.startswith("issue:"):
+            kind = key.split(":", 1)[1]
+            rows.append({"key": key, "label": analyze_mod.issue_label(kind),
+                         "count": n, "order": 2})
+    rows.sort(key=lambda r: (r["order"], -r["count"]))
+    counts = lib.counts()
+    return {
+        "rows": rows,
+        "analyzed": counts.get("analyzed", 0),
+        "total": counts.get("total", 0),
+        "active": bool(prog.get("running")),
+    }
 
 
 def _issue_summary(lib) -> list[dict]:

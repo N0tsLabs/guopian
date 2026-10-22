@@ -19,7 +19,7 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from . import analyze, config, faces, group, imageio, metrics
-from .store import Store
+from .store import Store, face_gates as store_face_gates
 
 
 class Progress:
@@ -36,6 +36,10 @@ class Progress:
         self.finished = 0.0
         self.rate = 0.0
         self.cancelled = False
+        # 边分析边分类：{"face": 12, "no_face": 3, "issue:blurry": 2, ...}
+        # 首屏那个"分类情况"图表读的就是它。只在第一遍分析时填 —— 之后
+        # 精确的分类在 recompute() 里按标定重算，两套数字不混用。
+        self.buckets: dict[str, int] = {}
 
     def snap(self) -> dict:
         with self.lock:
@@ -48,6 +52,7 @@ class Progress:
                 "eta": round((self.total - self.done) / self.rate, 1) if self.rate > 0 and self.done < self.total else 0,
                 "cancelled": self.cancelled,
                 "running": self.phase not in ("idle", "done", "error", "cancelled"),
+                "buckets": dict(self.buckets),
             }
 
     def update(self, **kw):
@@ -138,7 +143,7 @@ class Library:
                 res = analyze.analyze_photo(row["path"])
                 self.store.save_analysis(row["id"], res["meta"], res["metrics"],
                                          res["faces"], [], res["phash"])
-                return True
+                return res
             except Exception as e:
                 # Discard anything half-written for this photo before recording
                 # the failure, otherwise a partial row would look "analysed".
@@ -147,19 +152,26 @@ class Library:
                 except Exception:
                     pass
                 self.store.mark_error(row["id"], "{}: {}".format(type(e).__name__, e))
-                return False
+                return None
 
+        self._live_reset()
         with ThreadPoolExecutor(max_workers=self.workers) as pool:
             futs = {pool.submit(work, r): r for r in pending}
             for fut in as_completed(futs):
                 row = futs[fut]
                 try:
-                    got = fut.result()
+                    res = fut.result()
                 except Exception:
-                    got = False
+                    res = None
+                if res:
+                    # 这一步只是让首屏图表有东西看，失败不能影响分析本身。
+                    try:
+                        self._live_add(row, res)
+                    except Exception:
+                        pass
                 with self.progress.lock:
                     self.progress.done += 1
-                    if got:
+                    if res:
                         self.progress.ok += 1
                     else:
                         self.progress.failed += 1
@@ -168,6 +180,58 @@ class Library:
                         self.progress.rate = self.progress.done / max(
                             0.001, time.time() - self.progress.started)
         return len(pending)
+
+    # -------------------------------------------------- 边分析边分类（首屏图表）
+
+    def _live_reset(self):
+        self._live_items: list[tuple[dict, list[dict]]] = []
+        self._live_calib: dict = {}
+        with self.progress.lock:
+            self.progress.buckets = {}
+
+    @staticmethod
+    def _live_count_into(merged: dict, faces: list[dict], calib: dict, out: dict):
+        if (merged.get("face_count") or 0) > 0:
+            out["face"] = out.get("face", 0) + 1
+        else:
+            out["no_face"] = out.get("no_face", 0) + 1
+        try:
+            kinds = {i["kind"] for i in analyze.evaluate(merged, faces, calib)}
+        except Exception:
+            kinds = set()
+        for k in kinds:
+            key = "issue:" + k
+            out[key] = out.get(key, 0) + 1
+
+    def _live_add(self, row: dict, res: dict):
+        merged = {**row, **(res.get("meta") or {}), **(res.get("metrics") or {})}
+        merged["face_count"] = len(res.get("faces") or [])
+        faces = []
+        for f in res.get("faces") or []:
+            d = dict(f)
+            d["gates"] = store_face_gates(d)
+            faces.append(d)
+        self._live_items.append((merged, faces))
+
+        # 阈值要靠整批照片的分布算（soft/noisy 都是相对值），所以一开始没有
+        # 标定，先用绝对门槛；每收满一批重算一次标定并把已完成的重新分类。
+        # 这样图表会"越来越准"，而不是一直按第一条规则乱分。
+        if len(self._live_items) % config.LIVE_REBUILD_EVERY == 0:
+            self._live_calib = metrics.calibrate([m for m, _ in self._live_items])
+            self._live_recount()
+        else:
+            add: dict[str, int] = {}
+            self._live_count_into(merged, faces, self._live_calib, add)
+            with self.progress.lock:
+                for k, v in add.items():
+                    self.progress.buckets[k] = self.progress.buckets.get(k, 0) + v
+
+    def _live_recount(self):
+        out: dict[str, int] = {}
+        for merged, faces in self._live_items:
+            self._live_count_into(merged, faces, self._live_calib, out)
+        with self.progress.lock:
+            self.progress.buckets = out
 
     # -------------------------------------------------------------- stage 2
 
@@ -295,4 +359,5 @@ class Library:
             "SELECT COUNT(*) n FROM photos WHERE analysis_version>=?",
             (config.ANALYSIS_VERSION,)).fetchone()["n"]
         return {"total": total, "analyzed": analyzed, "decisions": c}
+
 

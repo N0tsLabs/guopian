@@ -197,6 +197,72 @@ code{font:400 11.5px var(--mono);color:var(--ink-2);
 
 .view{position:fixed;inset:0;display:flex;flex-direction:column}
 
+/* ═══════════════════ 首次分析：进度 + 分类图表 ═══════════════════
+
+   一个居中的卡片，宽度按内容定（上限 720px）：图表要有横向空间才读得出
+   长短，但整页铺满又会让两行数字显得空。进度条和下面每根分类条用同一套
+   圆角/高度，读起来是"同一个东西的两种粒度"。 */
+
+.bootWrap{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:var(--s6);
+}
+.bootCard{
+  width:min(720px,100%);max-height:100%;overflow:auto;
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r3);padding:var(--s6);
+  box-shadow:0 24px 60px rgba(0,0,0,.35);
+}
+.bootHead{display:flex;align-items:baseline;gap:var(--s3);flex-wrap:wrap}
+.bootTitle{font:600 17px var(--ui);color:var(--ink)}
+.bootTitle b{font-weight:700;color:var(--accent)}
+.bootSub{font:400 12px var(--mono);color:var(--ink-2)}
+.bootBar{
+  height:6px;border-radius:3px;background:var(--surface-3);
+  overflow:hidden;margin:var(--s4) 0 var(--s2);
+}
+.bootBar i{
+  display:block;height:100%;width:0;border-radius:3px;background:var(--accent);
+  transition:width .25s ease-out;
+}
+.bootNums{font:400 12px var(--mono);color:var(--ink-3);text-align:right}
+
+.bootChartHead{
+  display:flex;align-items:baseline;justify-content:space-between;
+  margin:var(--s5) 0 var(--s3);padding-top:var(--s4);
+  border-top:1px solid var(--line);
+  font:600 13px var(--ui);color:var(--ink);
+}
+.bootChartHead .muted{font-weight:400;font-size:11.5px}
+
+.bootChart{display:flex;flex-direction:column;gap:7px}
+.bootRow{display:grid;grid-template-columns:132px 1fr 52px;align-items:center;gap:var(--s3)}
+.bootRow .lbl{
+  font:500 12px var(--ui);color:var(--ink-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.bootRow .track{height:9px;border-radius:5px;background:var(--surface-3);overflow:hidden}
+.bootRow .track i{
+  display:block;height:100%;border-radius:5px;background:var(--ink-3);
+  transition:width .3s ease-out;
+}
+/* 分类条的颜色沿用"不过 / 待看"的语义色，和过图页面里的标签是同一套 */
+.bootRow.sev-fatal .track i{background:var(--reject)}
+.bootRow.sev-high  .track i{background:var(--mark)}
+.bootRow.sev-medium .track i{background:var(--mark)}
+.bootRow.sev-info  .track i{background:var(--ink-3)}
+.bootRow .num{
+  font:500 12px var(--mono);color:var(--ink-2);text-align:right;
+  font-variant-numeric:tabular-nums;
+}
+.bootEmpty{padding:var(--s4) 0;text-align:center}
+
+.bootFoot{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-top:var(--s5);padding-top:var(--s4);border-top:1px solid var(--line);
+  font-size:11.5px;
+}
+
 /* ═══════════════════════════════ top bar ═══════════════════════════════ */
 
 .topbar{

@@ -199,6 +199,26 @@ CREATE INDEX IF NOT EXISTS idx_apply_items ON apply_items(batch);
 """
 
 
+def face_gates(d: dict) -> dict:
+    """一张脸值不值得判：太小、太偏、眼睛太小，就不要拿它下结论。
+
+    独立成函数是因为有两个调用方 —— 读库时的 load_face_index，和边分析边
+    估算分类（首屏图表）的那一遍。两边阈值必须一样，否则图表上的"眼睛闭合"
+    和过图页面里的会对不上。
+    """
+    yaw = abs(d.get("yaw") or 0.0)
+    face_px = d.get("face_px")
+    eye_px = d.get("eye_px")
+    too_small = face_px is not None and face_px < config.FACE_MIN_PIXELS
+    eye_too_small = eye_px is not None and eye_px < config.EYE_MIN_PIXELS * 2
+    return {
+        "face_px": face_px, "eye_px": eye_px, "yaw": yaw,
+        "too_small": bool(too_small), "eye_too_small": bool(eye_too_small),
+        "turned": yaw > config.FACE_EDGE_MAX_YAW,
+        "judge_eyes": not (too_small or eye_too_small or yaw > config.FACE_EDGE_MAX_YAW),
+    }
+
+
 class Store:
     def __init__(self, work_dir: str):
         os.makedirs(work_dir, exist_ok=True)
@@ -441,17 +461,7 @@ class Store:
                     d["landmarks"] = json.loads(d["landmarks"])
                 except Exception:
                     d["landmarks"] = None
-            yaw = abs(d.get("yaw") or 0.0)
-            face_px = d.get("face_px")
-            eye_px = d.get("eye_px")
-            too_small = face_px is not None and face_px < config.FACE_MIN_PIXELS
-            eye_too_small = eye_px is not None and eye_px < config.EYE_MIN_PIXELS * 2
-            d["gates"] = {
-                "face_px": face_px, "eye_px": eye_px, "yaw": yaw,
-                "too_small": bool(too_small), "eye_too_small": bool(eye_too_small),
-                "turned": yaw > config.FACE_EDGE_MAX_YAW,
-                "judge_eyes": not (too_small or eye_too_small or yaw > config.FACE_EDGE_MAX_YAW),
-            }
+            d["gates"] = face_gates(d)
             out.setdefault(d["photo_id"], []).append(d)
         return out
 

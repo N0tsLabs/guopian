@@ -45,6 +45,12 @@ TRASH_DIR_NAME = "_guopian_rejected"
 #    corrected to say what browDown actually measures.
 ANALYSIS_VERSION = 6
 
+# 首屏"边分析边分类"图表：每收满这么多张重算一次阈值。
+# 阈值（soft / noisy）是按整批照片的分布算出来的，分析开始时没有分布可用，
+# 只能先按绝对门槛分类；收得越多，重算一次就越准。这只影响图表上的数字，
+# 不影响最终判定 —— 那一步在 recompute() 里用全量标定重算。
+LIVE_REBUILD_EVERY = 40
+
 THUMB_SMALL = 400     # grid + the left-hand list
 THUMB_CARD = 1600     # instant first paint while the full image loads
 THUMB_ZOOM = 3000     # RAW/HEIC only: the largest preview we can extract

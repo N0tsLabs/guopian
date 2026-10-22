@@ -97,6 +97,11 @@ _ISSUE_TEXT = {
 }
 
 
+def issue_label(kind: str) -> str:
+    """问题类型的显示名。bucket 图表和 issues 表用的是同一张表。"""
+    return (_ISSUE_TEXT.get(kind) or (kind, kind))[0]
+
+
 def _issue(kind: str, severity: str, confidence: float, detail: str = "",
            face_idx: int | None = None, evidence: dict | None = None) -> dict:
     zh, en = _ISSUE_TEXT.get(kind, (kind, kind))
