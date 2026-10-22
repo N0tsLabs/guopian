@@ -42,8 +42,8 @@ import { renderList, renderListSummary, markListItem, pickStartIndex,
          savedSession, saveSession, configure as configureList } from './list.js';
 import { render, renderActionState, renderDecisionBadge, placeStamp,
          configure as configureCard } from './card.js';
-import { openGrid, closeGrid, onGridClick, decideSelected, showResults,
-         setSearchTitle, configure as configureGrid } from './grid.js';
+import { openGrid, closeGrid, onGridClick, decideSelected,
+         configure as configureGrid } from './grid.js';
 import { onKeyDown, onKeyUp, configure as configureKeys } from './keys.js';
 
 // Everything comes from core.js. This file knows nothing about home.js.
@@ -106,7 +106,6 @@ function grab() {
     listShow: $('#listShow'), listHide: $('#listHide'),
     gridView: $('#gridView'), grid: $('#grid'), gridSort: $('#gridSort'),
     gridFilter: $('#gridFilter'), gridCount: $('#gridCount'),
-    gridSearchTitle: $('#gridSearchTitle'), gridSearchClear: $('#gridSearchClear'),
     modal: $('#modal'), sheet: $('#sheet'), help: $('#help'), browser: $('#browser'),
     coach: $('#coach'),
   });
@@ -706,60 +705,6 @@ function showCoachOnce() {
 /* ═════════════════════════ 绑定 ═════════════════════════ */
 
 let bound = false;
-/* ═════════════════════════ 场景搜索 ═════════════════════════
-
-   搜的是"这张图像什么"，不是文件名、也不是标签文字。词表在 guopian/tags.py，
-   每张照片只存一个 512 维向量，搜索就是把向量和一个词的点积排一遍 ——
-   1428 张不到一毫秒，加一个新词也不用重跑任何分析。
-
-   输入框没有按钮：回车就搜。搜不到时不说"0 张"，而是把词表里像的词提出来。 */
-function bindSceneSearch() {
-  const box = $('#sceneSearch');
-  const clear = $('#gridSearchClear');
-  if (box) {
-    box.onkeydown = e => {
-      if (e.key === 'Enter') { e.preventDefault(); doSearch(box.value); }
-    };
-  }
-  if (clear) {
-    clear.addEventListener('click', () => {
-      if (box) box.value = '';
-      setSearchTitle('');
-      closeGrid();
-    });
-  }
-  loadSceneTags();
-}
-
-async function loadSceneTags() {
-  const list = $('#sceneTags');
-  if (!list || list.options.length) return;
-  try {
-    const m = await api('/api/tags');
-    list.innerHTML = (m.tags || [])
-      .map(t => `<option value="${esc(t.zh)}"></option>`).join('');
-  } catch (e) {
-    // 补全拿不到就只是个没有候选的输入框，搜索本身照常
-  }
-}
-
-async function doSearch(raw) {
-  const q = (raw || '').trim();
-  if (!q) return;
-  let r;
-  try { r = await api('/api/search?q=' + encodeURIComponent(q)); }
-  catch (e) { toast('搜索失败：' + (e.body && e.body.error || e.message || e), 'err'); return; }
-
-  // 搜索结果里的照片要能在卡片视图里打开，所以先把底层队列切到「全部」。
-  // 否则点一张搜出来的照片会找不到它在队列里的位置，只能回到第一张。
-  if (r.tag && S.filter !== 'all') {
-    S.filter = 'all';
-    if (el.gridFilter) el.gridFilter.value = 'all';
-    await loadQueue();
-  }
-  showResults(r);
-}
-
 function bind() {
   if (bound) return;
   bound = true;
@@ -780,7 +725,6 @@ function bind() {
 
   $('#btnGrid').onclick = openGrid;
   $('#btnGridClose').onclick = closeGrid;
-  bindSceneSearch();
   $('#btnTriage').onclick = () => el.triage.classList.toggle('hidden');
   $('#btnHelp').onclick = () => el.help.classList.remove('hidden');
   // With the confirmation switched off, the button applies immediately.

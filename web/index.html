@@ -108,16 +108,6 @@
     </div>
     <div class="pathChip" id="rootLabel" title=""></div>
 
-    <div class="searchBox">
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" aria-hidden="true">
-        <circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 4.5 4.5"/>
-      </svg>
-      <input id="sceneSearch" type="search" list="sceneTags" autocomplete="off"
-             placeholder="找场景：湖边 / 人像 / 雪山…" aria-label="按场景搜索">
-      <datalist id="sceneTags"></datalist>
-    </div>
-
     <div class="progressWrap" id="progressWrap">
       <div class="progressBar"><i id="progressFill"></i></div>
       <span class="progressText" id="progressText"></span>
@@ -266,8 +256,6 @@
       <option value="name">按文件名</option>
     </select>
     <span class="muted" id="gridCount"></span>
-    <span class="gridSearchTitle hidden" id="gridSearchTitle"></span>
-    <button class="btn ghost hidden" id="gridSearchClear">清除搜索</button>
     <div class="spacer"></div>
     <button class="btn ghost" id="gridDecideKeep">标为<b data-label="keep"></b></button>
     <button class="btn ghost" id="gridDecideReject">标为<b data-label="reject"></b></button>

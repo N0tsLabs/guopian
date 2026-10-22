@@ -183,27 +183,6 @@ def _parse_taken_ts(taken_at: str | None) -> float | None:
 JPEG_EXT = {".jpg", ".jpeg", ".jpe"}
 
 
-def face_crop(im: Image.Image, box: dict, margin: float = 0.15) -> Image.Image:
-    """Cut one face out of a photo.
-
-    `box` is the normalised (x, y, w, h) stored in the faces table, where
-    (x, y) is the **top-left corner**, not the centre. Getting that wrong shifts
-    every crop by half a face and quietly wrecks anything downstream: with the
-    centre interpretation, an emotion model's "happy" top hits were all people
-    wearing sunglasses, because the glasses landed inside the offset box.
-
-    One implementation, used by the analysis pass and by the evaluation scripts.
-    """
-    w, h = im.size
-    fw, fh = box["w"] * w, box["h"] * h
-    cx = box["x"] * w + fw / 2.0
-    cy = box["y"] * h + fh / 2.0
-    half_w = fw * (1.0 + margin) / 2.0
-    half_h = fh * (1.0 + margin) / 2.0
-    return im.crop((int(max(0, cx - half_w)), int(max(0, cy - half_h)),
-                    int(min(w, cx + half_w)), int(min(h, cy + half_h))))
-
-
 def open_image(path: str, max_edge: int | None = None) -> tuple[Image.Image, bool, float]:
     """Open any supported file.
 

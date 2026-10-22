@@ -24,24 +24,6 @@ MODEL_URLS = {
         "https://storage.googleapis.com/mediapipe-models/face_landmarker/"
         "face_landmarker/float16/1/face_landmarker.task"
     ),
-    # CLIP ViT-B/32 vision tower, exported and int8-quantised by
-    # evaluation/export_clip_onnx.py (352 MB fp32 -> 92 MB). Only the visual
-    # half: the scene words are a fixed vocabulary whose vectors ship inside
-    # the package (guopian/data/tag_vecs.npy), so no text tower is needed.
-    #
-    # The file has to be attached to a GitHub release once the repository is
-    # pushed; until then a local models/clip_vision.onnx is used and nothing
-    # is downloaded. `present()` is the only check that matters.
-    "clip_vision.onnx": (
-        "https://github.com/N0tsLabs/guopian/releases/download/models-v1/"
-        "clip_vision.onnx"
-    ),
-    # 表情：MobileFaceNet 多任务（mbf_va_mtl），7.9 MB，AffectNet 训练。
-    # 一个模型同时给 8 类情绪和效价/唤醒；同上面一样，本地有就直接用。
-    "emotion.onnx": (
-        "https://github.com/N0tsLabs/guopian/releases/download/models-v1/"
-        "emotion.onnx"
-    ),
 }
 
 

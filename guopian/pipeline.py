@@ -18,9 +18,7 @@ import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import numpy as np
-
-from . import analyze, config, embed, emotion, faces, group, imageio, metrics
+from . import analyze, config, faces, group, imageio, metrics
 from .store import Store
 
 
@@ -85,8 +83,6 @@ class Library:
         self.progress = Progress()
         self._cancel = threading.Event()
         self._thread: threading.Thread | None = None
-        self._embed_thread: threading.Thread | None = None
-        self._emo_thread: threading.Thread | None = None
 
     # -------------------------------------------------------------- scan
 
@@ -173,134 +169,6 @@ class Library:
                             0.001, time.time() - self.progress.started)
         return len(pending)
 
-    # -------------------------------------------------------------- stage 3
-
-    def emotion_pending(self, limit: int | None = None) -> int:
-        """给每张脸算表情（8 类 + 效价/唤醒）。
-
-        单独一遍，不塞进 analyze：那张表已经够宽了，而且表情换模型比换测光
-        算法频繁得多 —— 分开以后换模型只要重跑这一遍，不用重算模糊和曝光。
-
-        只读缓存的预览图，一张脸 3 ms。没有模型就安静跳过：表情是加分项，
-        不能因为它没下载就挡住看照片。
-        """
-        ok, why = emotion.available()
-        if not ok:
-            self.progress.update(phase="emotion-skip", message=why)
-            return 0
-
-        pending = self.store.emotion_pending(config.EMOTION_MODEL_TAG)
-        if limit:
-            pending = pending[:limit]
-        if not pending:
-            return 0
-
-        self.progress.update(phase="emotion", total=len(pending), done=0, ok=0, failed=0,
-                             started=time.time(), finished=0.0,
-                             message="判断表情…")
-        from PIL import Image
-
-        for n, row in enumerate(pending):
-            if self._cancel.is_set():
-                break
-            try:
-                p = self.thumbs.get_or_build(row["path"], row["size"],
-                                             row["mtime"], config.EMBED_EDGE)
-                im = Image.open(p)
-                faces = [f for f in self.store.face_rows(row["id"])
-                         if (f["face_px"] or 0) >= config.EMOTION_MIN_FACE_PX]
-                if faces:
-                    crops = [imageio.face_crop(im, f, 0.15) for f in faces]
-                    for f, res in zip(faces, emotion.predict(crops)):
-                        self.store.set_face_emotion(row["id"], f["idx"], res,
-                                                    config.EMOTION_MODEL_TAG)
-                    self.store.refresh_photo_emotion(row["id"])
-                    self.store.conn.commit()
-                with self.progress.lock:
-                    self.progress.done += 1
-                    self.progress.ok += 1
-                    self.progress.current = row["name"]
-                    if n % 8 == 0:
-                        self.progress.message = "判断表情 {}/{}".format(n + 1, len(pending))
-            except Exception as e:
-                try:
-                    self.store.conn.rollback()
-                except Exception:
-                    pass
-                with self.progress.lock:
-                    self.progress.done += 1
-                    self.progress.failed += 1
-                    self.progress.message = "表情失败 {}：{}".format(row["name"], e)
-        self.progress.update(message="表情计算完成，{} 张照片".format(self.progress.ok))
-        return self.progress.ok
-
-    def embed_pending(self, limit: int | None = None) -> int:
-        """算每张照片的画面向量（语义搜索 + 相似分组的原料）。
-
-        和 analyze_pending 分工不同：那一步算的是"这张图技术上怎么样"，
-        这一步算的是"这张图拍的是什么"。所以它只读已经缓存的预览图，
-        不解原图、不碰 EXIF —— 一个缩略图就够了，一张 20 ms。
-
-        模型不在就安静地跳过。搜索是可选功能，不能因为没下模型就挡住
-        看照片这件事。
-        """
-        ok, why = embed.available()
-        if not ok:
-            self.progress.update(phase="embed-skip", message=why)
-            return 0
-
-        pending = self.store.missing_vectors(config.EMBED_MODEL)
-        if limit:
-            pending = pending[:limit]
-        if not pending:
-            return 0
-
-        self.progress.update(phase="embed", total=len(pending), done=0, ok=0, failed=0,
-                             started=time.time(), finished=0.0,
-                             message="识别画面内容…")
-        from PIL import Image
-
-        size = config.EMBED_BATCH
-        for start in range(0, len(pending), size):
-            if self._cancel.is_set():
-                break
-            chunk = pending[start:start + size]
-            images, keep = [], []
-            for row in chunk:
-                try:
-                    p = self.thumbs.get_or_build(row["path"], row["size"],
-                                                 row["mtime"], config.EMBED_EDGE)
-                    images.append(Image.open(p))
-                    keep.append(row)
-                except Exception:
-                    self.store.mark_error(row["id"], "缩略图读不出来")
-                    with self.progress.lock:
-                        self.progress.done += 1
-                        self.progress.failed += 1
-            if not images:
-                continue
-            try:
-                vecs = embed.encode(images)
-            except Exception as e:
-                # A batch that fails should not take the whole pass down: the
-                # photos stay "missing" and the next run retries them.
-                with self.progress.lock:
-                    self.progress.message = "向量化失败：{}".format(e)
-                continue
-            for row, v in zip(keep, vecs):
-                self.store.set_vector(row["id"], v, config.EMBED_MODEL)
-            self.store.conn.commit()
-            with self.progress.lock:
-                self.progress.done += len(keep)
-                self.progress.ok += len(keep)
-                self.progress.current = keep[-1]["name"]
-                self.progress.rate = self.progress.done / max(
-                    0.001, time.time() - self.progress.started)
-                self.progress.message = "识别画面内容 {}/{}".format(
-                    self.progress.done, self.progress.total)
-        self.progress.update(message="画面识别完成，共 {} 张".format(self.progress.ok))
-        return len(pending)
-
     # -------------------------------------------------------------- stage 2
 
     def recompute(self) -> dict:
@@ -347,21 +215,7 @@ class Library:
             blk["cast"] = cast_ctx
         self.store.set_meta("calibration", calib)
 
-        # 分组：有画面向量就用向量（完全连接），没有就退回 pHash（单链）。
-        #
-        # 这不是"更好的算法当默认"这种口味问题。旧的单链聚合会把一整个上午
-        # 在同一机位拍的照片串成一大组 —— 实测 128 张一组，里面既有双人合影
-        # 也有空景（两者余弦只有 0.58）。向量这条路能分清"同一个场景"和
-        # "同一个瞬间"，因为它比的是内容，不是低频结构。
-        ids, mat = self.store.load_vectors(config.EMBED_MODEL)
-        vec_of: dict[int, np.ndarray] = {}
-        if len(ids) >= max(8, int(len(rows) * 0.8)):
-            vec_of = {pid: mat[i] for i, pid in enumerate(ids)}
-        if vec_of:
-            groups = group.build_groups_vec(rows, vec_of)
-            self.progress.update(message="按画面内容分组（{} 张有向量）…".format(len(vec_of)))
-        else:
-            groups = group.build_groups(rows)
+        groups = group.build_groups(rows)
         group.rank_groups(rows, face_index, groups)
 
         # 键必须是照片 id，不是 rows 里的下标。
@@ -370,8 +224,7 @@ class Library:
         # 而下面按 row_group_ctx.get(r["id"]) 取 —— 相差一个"下标 vs id"。
         # rows 按拍摄时间排序、id 按入库顺序，两者只有恰好一致时才不出错；
         # 这个库里一错到底：组信息被贴到了别的照片上，于是"两张不同瞬间的
-        # 照片在同一个组里"、"组里有俩人也有空景"这种怪现象，分组算法本身
-        # 反而是对的。
+        # 照片在同一个组里"这种怪现象，分组算法本身反而是对的。
         row_group_ctx: dict[int, dict] = {}
         for g in groups:
             for m in g["members"]:
@@ -414,16 +267,7 @@ class Library:
                 self.progress.update(phase="cancelled", message="已取消")
                 return
 
-            # 表情要排在 recompute 之前：组内排名会用到它（group._WEIGHTS）。
-            # 它只读预览图，比分析快两个数量级，1428 张里 969 张有脸、约 4 秒。
-            self.emotion_pending()
-
-            # 先算画面向量，再算分组：分组要用它们（见 recompute）。
-            # 没有模型时这一步立刻返回 0，不会拖慢打开库。
-            self.embed_pending()
-
             self.recompute()
-
             self.progress.update(phase="done", finished=time.time(),
                                  message="分析完成，用时 {:.1f} 秒".format(time.time() - t0))
         except Exception as e:
@@ -439,65 +283,6 @@ class Library:
         self._thread.start()
         return True
 
-    def embedding(self) -> bool:
-        """向量化那一遍还在跑吗。"""
-        return bool(self._embed_thread and self._embed_thread.is_alive())
-
-    def emoting(self) -> bool:
-        return bool(self._emo_thread and self._emo_thread.is_alive())
-
-    def start_emotion(self) -> bool:
-        """只补表情，不重跑分析。换了模型或刚下完模型时用。"""
-        if self.emoting():
-            return False
-        self._cancel.clear()
-        self._emo_thread = threading.Thread(target=self._emotion_only, daemon=True)
-        self._emo_thread.start()
-        return True
-
-    def _emotion_only(self):
-        """补完表情要顺手重算一遍排名，否则界面上的"组内第几"还是旧的。"""
-        t0 = time.time()
-        try:
-            n = self.emotion_pending()
-            if n:
-                self.recompute()
-            self.progress.update(phase="done", finished=time.time(),
-                                 message="表情计算完成 · {} 张 · {:.0f} 秒".format(
-                                     n, time.time() - t0))
-        except Exception as e:
-            self.progress.update(phase="error",
-                                 message="{}: {}".format(type(e).__name__, e))
-
-    def start_embed(self) -> bool:
-        """只补向量，不重跑分析。
-
-        单独一个入口，因为这两件事的时间尺度差一个数量级：分析 1428 张要
-        几分钟，算向量一分钟。下了模型以后没必要为此重跑一遍分析。
-        """
-        if self.embedding():
-            return False
-        self._cancel.clear()
-        self._embed_thread = threading.Thread(target=self._embed_only, daemon=True)
-        self._embed_thread.start()
-        return True
-
-    def _embed_only(self):
-        """单独补向量时也要把进度状态收尾，否则界面会一直停在"识别中"。"""
-        t0 = time.time()
-        try:
-            n = self.embed_pending()
-            if n:
-                # 有了向量，分组就该按向量重算：否则搜索已经按内容在找了，
-                # 相似组还是 pHash 那套旧结果，同一个界面里两套标准。
-                self.recompute()
-            self.progress.update(phase="done", finished=time.time(),
-                                 message="画面识别完成 · {} 张 · {:.0f} 秒".format(
-                                     n, time.time() - t0))
-        except Exception as e:
-            self.progress.update(phase="error",
-                                 message="{}: {}".format(type(e).__name__, e))
-
     def cancel(self):
         self._cancel.set()
 
@@ -510,5 +295,4 @@ class Library:
             "SELECT COUNT(*) n FROM photos WHERE analysis_version>=?",
             (config.ANALYSIS_VERSION,)).fetchone()["n"]
         return {"total": total, "analyzed": analyzed, "decisions": c}
-
 

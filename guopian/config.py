@@ -26,38 +26,6 @@ WEB_DIR = os.path.join(ROOT_DIR, "web")
 MODEL_DIR = os.path.join(ROOT_DIR, "models")
 FACE_MODEL = os.path.join(MODEL_DIR, "face_landmarker.task")
 
-# CLIP's vision tower, exported to ONNX and quantised on the way out: 96 MB
-# instead of 352 MB, and no torch at runtime. Only the visual half ships --
-# the scene words are a fixed vocabulary whose vectors are precomputed
-# (guopian/data/tag_vecs.npy), so the text tower is not needed in the app.
-SCENE_MODEL = os.path.join(MODEL_DIR, "clip_vision.onnx")
-# Bumped whenever the exported graph or its preprocessing changes: it is part of
-# the identity of a stored vector, so old vectors get recomputed rather than
-# silently mixed with new ones.
-EMBED_MODEL = "clip-vitb32-int8-v1"
-EMBED_BATCH = 8
-EMBED_EDGE = 1600          # encode the same preview the stage shows
-
-# 表情模型：MobileFaceNet 多任务，7.9 MB，112x112，CPU 上 3 ms 一张。
-# 算的是"这张脸长什么样"，和 CLIP 那套"这张图讲什么"是两回事。
-EMOTION_MODEL = os.path.join(MODEL_DIR, "emotion.onnx")
-EMOTION_MODEL_TAG = "mbf-va-mtl-v1"
-EMOTION_BATCH = 16
-# 一张脸多小就不判表情了。和评眼睛的阈值同源：脸太小，什么模型都只是猜。
-EMOTION_MIN_FACE_PX = 60
-
-# 分组（有画面向量时走这条路，见 group.build_groups_vec）
-#
-# 为什么和 pHash 那套参数不是一套：pHash 那套是并查集，靠"能借道"把照片串
-# 起来，所以阈值和时间窗都要给得很大才能连上；向量这套是完全连接，借不了道，
-# 阈值给紧反而更准。实测：真近似重复余弦 0.98，同场景不同瞬间 0.90-0.95，
-# "一张双人合影 vs 一张空景" 0.58 —— 0.85 落在空档里。
-GROUP_COSINE = 0.85
-GROUP_WINDOW_SEC = 15.0
-# 一组最多几张。连拍一个上午能在同一机位拍上百张，全串一组就没法"挑一张"了。
-# 12 是"一个连拍序列"的量级，不是"一个景点"。
-GROUP_MAX = 12
-
 # Per-library working data lives in <library>/.guopian/
 WORK_DIR_NAME = ".guopian"
 TRASH_DIR_NAME = "_guopian_rejected"

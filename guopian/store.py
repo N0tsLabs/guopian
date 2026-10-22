@@ -9,24 +9,15 @@ import threading
 import time
 from typing import Any, Iterable
 
-import numpy as np
-
 from . import config, paths
 
 # Columns added after the first release. Kept as an explicit list so an older
 # catalog can be upgraded in place rather than thrown away and re-analysed.
 _ADDED_PHOTO_COLUMNS = (
     ("cast_r", "REAL"), ("cast_b", "REAL"),
-    # 一张照片里最"正面"的那张脸，和"有人在笑吗"。组内排名用它们。
-    ("face_valence", "REAL"), ("face_happy", "REAL"),
 )
 _ADDED_FACE_COLUMNS = (
     ("face_median", "REAL"), ("catch_l", "REAL"), ("catch_r", "REAL"),
-    # 表情（emotion.py 单独一遍算的，不在 analyze 里）：
-    # valence/arousal 是连续值，emo 是 8 类概率的 JSON。分开存是为了能在 SQL 里
-    # 直接按 valence 排序、统计，不用把 JSON 拖出来解析。
-    ("valence", "REAL"), ("arousal", "REAL"), ("emo", "TEXT"),
-    ("emo_model", "TEXT"),
 )
 
 # The face row is wide and has grown twice. Building the statement from the
@@ -205,17 +196,6 @@ CREATE TABLE IF NOT EXISTS apply_items (
 );
 
 CREATE INDEX IF NOT EXISTS idx_apply_items ON apply_items(batch);
-
--- 画面向量：语义搜索和相似分组的原料。float16 存储，512 维 = 1 KB/张。
--- model 记的是「哪个模型、哪个预处理版本」算出来的：换了模型以后旧向量不能
--- 和新向量混着比，所以它参与身份，缺的会被重算。
-CREATE TABLE IF NOT EXISTS photo_vec (
-    photo_id INTEGER PRIMARY KEY,
-    dim      INTEGER NOT NULL,
-    model    TEXT NOT NULL,
-    vec      BLOB NOT NULL,
-    at       REAL NOT NULL
-);
 """
 
 
@@ -474,83 +454,6 @@ class Store:
             }
             out.setdefault(d["photo_id"], []).append(d)
         return out
-
-    # -- 画面向量（语义搜索 / 相似分组）-------------------------------------
-    def set_vector(self, photo_id: int, vec, model: str):
-        arr = np.asarray(vec, dtype=np.float16)
-        self.conn.execute(
-            "INSERT INTO photo_vec(photo_id, dim, model, vec, at) VALUES(?,?,?,?,?) "
-            "ON CONFLICT(photo_id) DO UPDATE SET dim=excluded.dim, model=excluded.model,"
-            " vec=excluded.vec, at=excluded.at",
-            (photo_id, int(arr.size), model, arr.tobytes(), time.time()))
-
-    def missing_vectors(self, model: str) -> list[dict]:
-        """照片里还没有当前模型向量的那些（按 id 排序，批处理才跑得稳）。"""
-        return [dict(r) for r in self.conn.execute(
-            "SELECT p.* FROM photos p LEFT JOIN photo_vec v ON v.photo_id = p.id "
-            "WHERE v.photo_id IS NULL OR v.model <> ? ORDER BY p.id", (model,))]
-
-    def load_vectors(self, model: str | None = None) -> tuple[list[int], "np.ndarray"]:
-        """(photo_ids, N x dim float32)。model 给了就只取那个模型的。"""
-        sql = "SELECT photo_id, dim, vec FROM photo_vec"
-        args: tuple = ()
-        if model:
-            sql += " WHERE model = ?"
-            args = (model,)
-        sql += " ORDER BY photo_id"
-        ids: list[int] = []
-        rows: list[np.ndarray] = []
-        dim = 0
-        for r in self.conn.execute(sql, args):
-            v = np.frombuffer(r["vec"], dtype=np.float16).astype(np.float32)
-            dim = dim or int(r["dim"])
-            ids.append(int(r["photo_id"]))
-            rows.append(v)
-        if not rows:
-            return [], np.zeros((0, dim or 512), dtype=np.float32)
-        return ids, np.vstack(rows)
-
-    def vector_count(self, model: str | None = None) -> int:
-        if model:
-            return self.conn.execute("SELECT COUNT(*) FROM photo_vec WHERE model=?",
-                                     (model,)).fetchone()[0]
-        return self.conn.execute("SELECT COUNT(*) FROM photo_vec").fetchone()[0]
-
-    # -- 表情 -------------------------------------------------------------
-    def set_face_emotion(self, photo_id: int, idx: int, emo: dict, model: str):
-        self.conn.execute(
-            "UPDATE faces SET valence=?, arousal=?, emo=?, emo_model=? "
-            "WHERE photo_id=? AND idx=?",
-            (emo.get("valence"), emo.get("arousal"),
-             json.dumps(emo.get("probs"), ensure_ascii=False), model,
-             photo_id, idx))
-
-    def refresh_photo_emotion(self, photo_id: int):
-        """把一张照片里各张脸汇总到 photos 一行。
-
-        取 max 而不是 avg：一张合影里只要有一个人在对镜头笑，这张照片的
-        "表情价值"就成立了，被背景里路过的人拉低没有意义。
-        """
-        r = self.conn.execute(
-            "SELECT MAX(valence) v, MAX(json_extract(emo, '$.happiness')) h "
-            "FROM faces WHERE photo_id=? AND emo IS NOT NULL", (photo_id,)).fetchone()
-        self.conn.execute("UPDATE photos SET face_valence=?, face_happy=? WHERE id=?",
-                          (r["v"] if r else None, r["h"] if r else None, photo_id))
-
-    def emotion_pending(self, model: str) -> list[dict]:
-        """有脸、但还没算过表情的照片（按 id 排，批处理才稳）。"""
-        return [dict(r) for r in self.conn.execute(
-            """SELECT DISTINCT p.* FROM photos p JOIN faces f ON f.photo_id = p.id
-               WHERE f.emo IS NULL OR f.emo_model <> ? ORDER BY p.id""", (model,))]
-
-    def emotion_count(self) -> int:
-        return self.conn.execute(
-            "SELECT COUNT(*) FROM faces WHERE emo IS NOT NULL").fetchone()[0]
-
-    def face_rows(self, photo_id: int) -> list[dict]:
-        return [dict(r) for r in self.conn.execute(
-            "SELECT idx, x, y, w, h, face_px FROM faces WHERE photo_id=? ORDER BY idx",
-            (photo_id,))]
 
     # -- decisions --------------------------------------------------------
     def set_decision(self, photo_id: int, action: str, batch: str | None = None):
