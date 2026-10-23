@@ -226,7 +226,20 @@ function renderBoot(st) {
   $('#bootName').textContent = name;
   $('#bootFill').style.width = pct + '%';
 
-  const bits = [`分析 ${done}/${total}`, `${pct}%`];
+  // 阶段换名字。分析完之后还要补一遍"画面特征"（分组要用），那一段的
+  // done/total 是特征张数，如果照旧写"分析 0/40"，看起来像分析重新开始了 ——
+  // 实测截图里就是这个观感。照片总量另取 counts。
+  const analyzed = (st.counts && st.counts.analyzed) || 0;
+  const photoTotal = (st.counts && st.counts.total) || total;
+  const phase = p.phase || '';
+  const label = phase === 'embed' ? '提取特征'
+    : phase === 'evaluate' ? '分组'
+      : phase === 'scan' ? '扫描' : '分析';
+  const bits = [`${label} ${done}/${total}`, `${pct}%`];
+  if (phase === 'embed' && photoTotal) {
+    bits[0] = `提取特征 ${done}/${total}`;
+    bits.splice(1, 0, `照片 ${analyzed}/${photoTotal}`);
+  }
   if (p.rate) bits.push(`${p.rate.toFixed(1)}/s`);
   if (p.eta) bits.push(`剩 ~${fmtEta(p.eta)}`);
   $('#bootSub').textContent = bits.join(' · ');
