@@ -220,15 +220,19 @@ function renderBoot(st) {
   const p = st.progress || {};
   const total = p.total || (st.counts && st.counts.total) || 0;
   const done = p.done || 0;
-  const pct = total ? Math.min(100, Math.round(done / total * 100)) : 0;
+  // 进度条用服务端算好的 overall：分段跑的时候它按段加权、且只增不减。
+  // 直接用 done/total 会出现"分析跑到 100% → 换阶段又回到 0%"的跳变。
+  const pct = typeof p.overall === 'number'
+    ? Math.min(100, Math.round(p.overall * 100))
+    : (total ? Math.min(100, Math.round(done / total * 100)) : 0);
 
   const name = (st.root || '').split(/[\\/]/).filter(Boolean).pop() || '';
   $('#bootName').textContent = name;
   $('#bootFill').style.width = pct + '%';
 
-  // 阶段换名字。分析完之后还要补一遍"画面特征"（分组要用），那一段的
-  // done/total 是特征张数，如果照旧写"分析 0/40"，看起来像分析重新开始了 ——
-  // 实测截图里就是这个观感。照片总量另取 counts。
+  // 阶段换名字：扫描 / 分析 / 提取特征 / 分组。
+  // 现在向量是在逐张分析时一起算的，正常不会单独出现"提取特征"那一段；
+  // 只有补旧库时才会，而且这时进度条用的是 overall（只增不减），不会倒退。
   const analyzed = (st.counts && st.counts.analyzed) || 0;
   const photoTotal = (st.counts && st.counts.total) || total;
   const phase = p.phase || '';
@@ -237,7 +241,6 @@ function renderBoot(st) {
       : phase === 'scan' ? '扫描' : '分析';
   const bits = [`${label} ${done}/${total}`, `${pct}%`];
   if (phase === 'embed' && photoTotal) {
-    bits[0] = `提取特征 ${done}/${total}`;
     bits.splice(1, 0, `照片 ${analyzed}/${photoTotal}`);
   }
   if (p.rate) bits.push(`${p.rate.toFixed(1)}/s`);

@@ -42,6 +42,60 @@ class Progress:
         # 首屏那个"分类情况"图表读的就是它。只在第一遍分析时填 —— 之后
         # 精确的分类在 recompute() 里按标定重算，两套数字不混用。
         self.buckets: dict[str, int] = {}
+        # 整条进度条走过的最大值，保证只增不减（见 overall()）
+        self._overall = 0.0
+
+    def begin(self):
+        """新一趟开始：把上一趟的进度清干净。
+
+        不清理会有一段时间"新的一趟已经在跑、但 phase 还是上一趟的 done"，
+        谁在这中间看一眼（页面轮询、接口调用）就会看到"分析完成 17/24"这种
+        自相矛盾的快照。
+        """
+        with self.lock:
+            self.phase = "scan"
+            self.total = 0
+            self.done = 0
+            self.ok = 0
+            self.failed = 0
+            self.current = ""
+            self.message = ""
+            self.started = time.time()
+            self.finished = 0.0
+            self.rate = 0.0
+            self.cancelled = False
+            self._overall = 0.0
+            self.buckets = {}
+
+    def overall(self) -> float:
+        """整条进度条的百分比（0..1），只增不减。
+
+        一次分析分几段跑（扫描 → 逐张分析 → 补画面特征 → 分组），每段有自己
+        的 done/total。如果进度条直接显示"当前段"的百分比，第一段跑满 100%
+        之后会跳回 0%，看起来像从头再来一遍 —— 用户的反馈正是这个。
+
+        所以按段给权重，并记住走过的最大值：任何情况下都不许倒退。
+        """
+        p = self.phase
+        frag = (self.done / self.total) if self.total else 0.0
+        frag = max(0.0, min(1.0, frag))
+        if p == "scan":
+            v = 0.02 * frag
+        elif p == "analyze":
+            v = 0.02 + 0.80 * frag
+        elif p == "embed":
+            v = 0.82 + 0.14 * frag
+        elif p == "evaluate":
+            v = 0.97
+        elif p == "done":
+            v = 1.0
+        elif p == "cancelled":
+            v = max(self._overall, 0.02 + 0.80 * frag)
+        else:                       # idle / error：停在原地
+            v = self._overall
+        if v > self._overall:
+            self._overall = v
+        return self._overall
 
     def snap(self) -> dict:
         with self.lock:
@@ -52,6 +106,7 @@ class Progress:
                 "message": self.message, "elapsed": round(elapsed, 2),
                 "rate": round(self.rate, 2),
                 "eta": round((self.total - self.done) / self.rate, 1) if self.rate > 0 and self.done < self.total else 0,
+                "overall": round(self.overall(), 4),
                 "cancelled": self.cancelled,
                 "running": self.phase not in ("idle", "done", "error", "cancelled"),
                 "buckets": dict(self.buckets),
@@ -164,8 +219,15 @@ class Library:
                 row = futs[fut]
                 try:
                     res = fut.result()
-                except Exception:
+                except Exception as e:
+                    # work() 自己的 try 之外出错（建连接、写库被锁等）会落到
+                    # 这里。以前只当 None 记一次 failed、错误不留痕 —— 结果就是
+                    # "分析完成"而库里还有几张停在 version 0。
                     res = None
+                    try:
+                        self.store.mark_error(row["id"], "{}: {}".format(type(e).__name__, e))
+                    except Exception:
+                        pass
                 if res:
                     # 这一步只是让首屏图表有东西看，失败不能影响分析本身。
                     try:
@@ -391,18 +453,40 @@ class Library:
     def run_full(self):
         try:
             t0 = time.time()
+            self.progress.begin()
             self.progress.update(phase="scan", message="扫描文件…", started=t0)
             files = self.scan_files()
             self.store.upsert_scanned(files)
             self.progress.update(message="发现 {} 个图片文件".format(len(files)))
 
             self.analyze_pending()
+            # 兜底：确认真的没有漏下的照片。
+            #
+            # 实测出现过"进度条跑完、phase=done，但库里还有几张 analysis_version
+            # 停在 0"的情况 —— 没有 error、没有重试，用户看到的就是"分析完成"
+            # 却有几张没被判定。与其相信一趟一定跑全，不如自己数一遍。
+            for _ in range(3):
+                if self._cancel.is_set():
+                    break
+                left = self.store.needs_analysis(config.ANALYSIS_VERSION)
+                if not left:
+                    break
+                self.progress.update(message="补分析剩余 {} 张…".format(len(left)))
+                self.analyze_pending()
             if self._cancel.is_set():
                 self.progress.update(phase="cancelled", message="已取消")
                 return
+            left = self.store.needs_analysis(config.ANALYSIS_VERSION)
+            if left:
+                self.progress.update(
+                    phase="error", finished=time.time(),
+                    message="还有 {} 张没能分析（{} 等），可以再点一次重新分析".format(
+                        len(left), left[0]["name"]))
+                return
 
-            # 特征要排在 recompute 之前：分组要用它们。没有模型时这一步立刻
-            # 返回 0，分组自动走 pHash。
+            # 正常情况下向量已经在逐张分析时算完了，这一步什么也不做。
+            # 只有老库（分析过但没有向量）才会真的补一遍，补的时候进度条
+            # 用的是 overall，不会倒退。
             self.embed_pending()
 
             self.recompute()
@@ -417,6 +501,7 @@ class Library:
         if self._thread and self._thread.is_alive():
             return False
         self._cancel.clear()
+        self.progress.begin()      # 先清进度再起线程，避免看到上一趟的 done
         self._thread = threading.Thread(target=self.run_full, daemon=True)
         self._thread.start()
         return True

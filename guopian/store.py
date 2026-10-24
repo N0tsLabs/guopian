@@ -243,6 +243,12 @@ class Store:
         self.db_path = os.path.join(work_dir, "catalog.db")
         self._local = threading.local()
         con = self.conn
+        # WAL 在这里设一次就够：它是库级属性，写进文件头，之后所有连接都生效。
+        # 每个连接都设会争锁（见 conn()）。
+        try:
+            con.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.OperationalError:
+            pass
         con.executescript(SCHEMA)
         self._migrate(con)
         con.commit()
@@ -287,7 +293,13 @@ class Store:
         if c is None:
             c = sqlite3.connect(self.db_path, timeout=30.0)
             c.row_factory = sqlite3.Row
-            c.execute("PRAGMA journal_mode=WAL")
+            # journal_mode 只在建库时设一次（见 __init__ 里的 _enable_wal）。
+            #
+            # 以前每个线程的连接都执行 PRAGMA journal_mode=WAL —— 这条要短暂
+            # 拿排他锁，四个 worker 同时第一次写库时会互相顶掉，异常在分析线程
+            # 里被吞掉，结果是"几张照片既没分析、也没有错误记录"，界面却显示
+            # 分析完成。实测 20 张里稳定丢 3-4 张。
+            c.execute("PRAGMA busy_timeout=30000")
             c.execute("PRAGMA synchronous=NORMAL")
             self._local.conn = c
         return c

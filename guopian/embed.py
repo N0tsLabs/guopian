@@ -61,6 +61,11 @@ def session():
 
             so = ort.SessionOptions()
             so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            # 单线程推理。分析是 4 个线程并发跑同一个 session 的，如果 ORT 自己
+            # 也开满核，4×N 个线程会互相抢核心 —— 实测把 20 张照片的分析拖到
+            # 12 秒/张（单跑一张只要 0.5 秒）。让并发数由分析线程数决定。
+            so.intra_op_num_threads = 1
+            so.inter_op_num_threads = 1
             _SESSION = ort.InferenceSession(model_path(), sess_options=so,
                                             providers=["CPUExecutionProvider"])
     return _SESSION
@@ -76,6 +81,9 @@ def preprocess(im) -> np.ndarray:
 
     im = im.convert("RGB")
     w, h = im.size
+    # 一步 bicubic 缩到短边 256。试过"先 BOX 粗缩到 512 再 bicubic"，反而更慢
+    # （37 ms vs 32 ms，余弦差 0.0004）—— PIL 的大比例缩小本身已经够快，
+    # 多一趟转换只是在白花时间。
     scale = 256.0 / min(w, h)
     if scale < 1.0:
         im = im.resize((max(1, round(w * scale)), max(1, round(h * scale))),

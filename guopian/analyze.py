@@ -8,6 +8,8 @@ makes the progressive pipeline in docs/05 possible.
 
 from __future__ import annotations
 
+import os
+
 import math
 import os
 from typing import Any
@@ -67,6 +69,13 @@ def analyze_photo(path: str) -> dict:
     except Exception:
         ph = None
 
+    # 画面特征**不在这里算**。
+    #
+    # 试过把它并进这一趟（图片已经解码好，看着很划算），实测在这台机器上把
+    # 20 张照片的分析从 10 秒拖到 163 秒 —— 多个分析线程同时调 onnxruntime
+    # 的同一个 session，比单跑慢 25 倍。所以特征仍然单独一趟，但进度条用
+    # progress.overall 加权成一条只增不减的线（见 pipeline.Progress.overall），
+    # 用户看到的是 0→100% 走到底，不会再"跑满又归零"。
     return {"meta": meta, "metrics": m, "faces": face_rows, "phash": ph}
 
 
@@ -425,3 +434,4 @@ def verdict_from(issues: list[dict], group_ctx: dict | None = None) -> dict:
     elif sug == "keep":
         conf = 0.6
     return {"suggest": sug, "reason": why, "confidence": round(float(conf), 3)}
+
