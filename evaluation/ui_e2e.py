@@ -177,7 +177,7 @@ async (libSlug, phase) => {
     await wait(150);
   }
   await wait(800);
-  const gridOpen = !!st.S.grid && !document.querySelector('.decideGrid').classList.contains('hidden');
+  const gridOpen = !document.querySelector('.decideGrid').classList.contains('hidden');
   add('Ctrl 多选后网格打开', gridOpen, `sel=${st.S.sel.size}`);
   const d0 = st.S.queue.filter((c) => c.decision).length;
   const i0 = st.S.idx;
@@ -186,6 +186,7 @@ async (libSlug, phase) => {
   add('多图里按空格/方向键不决策',
       st.S.queue.filter((c) => c.decision).length === d0, `${d0}→${st.S.queue.filter((c) => c.decision).length}`);
   add('多图里按方向键不换图', st.S.idx === i0, `${i0}→${st.S.idx}`);
+  add('单图键位在多图里不生效（模式隔离）', typeof st.S.grid === 'undefined');
   add('多图格子用的是清晰图（card）',
       [...document.querySelectorAll('.dgTile img')].every((im) => /\/card$/.test(im.getAttribute('src'))));
 

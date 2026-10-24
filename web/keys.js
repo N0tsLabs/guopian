@@ -24,6 +24,7 @@ import { resetView, zoomAt, maxScale } from './view.js';
 import { renderOverlay, buildZebra } from './histogram.js';
 import { openGrid, closeGrid } from './grid.js';
 import { render } from './card.js';
+import { isMulti, handleMultiKey } from './mode.js';
 
 // Three decisions, hold-to-preview. J/K mirror the arrows for people who
 // keep their hand on the home row.
@@ -42,6 +43,15 @@ function overlayOpen() {
 }
 
 function onKeyDown(e) {
+  // 多图模式有自己的一整套键位（见 decidegrid.js 注册进来的 handler）。
+  // 先让它处理；它不认的键在单图里也用不上，直接吞掉，绝不落到单图逻辑 ——
+  // 这正是"多图里按空格却在决定左边列表"那个冲突的来源。
+  if (isMulti()) {
+    if (handleMultiKey(e)) { e.preventDefault(); return; }
+    if (e.key === 'Escape') return;
+    return;
+  }
+
   if (e.key === 'Escape') {
     el.help.classList.add('hidden');
     if (!el.modal.classList.contains('hidden')) closeModal();
@@ -57,7 +67,6 @@ function onKeyDown(e) {
   // 否则就是实测到的那个严重 bug：用户在多图里按空格/左右，界面看着没动，
   // 左边列表却在"精选"别的照片、还一路切走当前那张。多图有自己的按钮，
   // 单图的键在这里一个都不该生效。
-  if (S.grid) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   // Only the HOME screen ignores shortcuts. This used to test whether
   // #appView was hidden -- but openGrid() hides it too, so opening the grid

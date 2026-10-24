@@ -19,6 +19,7 @@
 import { G } from './core.js';
 import { S } from './state.js';
 import { computeGridLayout, GAP } from './gridlayout.js';
+import { setMode, registerMultiKeys } from './mode.js';
 
 const DecideGrid = (() => {
   const { $, esc, api, toast, imgUrl } = G;
@@ -163,7 +164,7 @@ const DecideGrid = (() => {
     build();
     // 多图模式正在进行。keys.js 靠这个标记让路 —— 否则空格/左右键还在
     // 悄悄决定左边列表里的"当前那张"，而用户以为自己在看多图。
-    S.grid = true;
+    setMode('multi', 'grid-open');
     ids = selectedIds.slice();
     onDone = done || null;
     focus = 0;
@@ -225,7 +226,7 @@ const DecideGrid = (() => {
   /** 用户按 Esc / 点取消：退出并把选择清空。 */
   function close() {
     if (root) root.classList.add('hidden');
-    S.grid = false;
+    setMode('single', 'grid-close');
     // 广播，不等回调 —— onDone 可能已经被上一次 close 或 syncGrid 用掉了，
     // 那样用户按 Esc 之后左侧的选择就清不掉（表现为"退出了多图，左边还亮着"）。
     window.dispatchEvent(new CustomEvent('guopian:gridcancel'));
@@ -236,7 +237,7 @@ const DecideGrid = (() => {
    *  不跑回调 —— 回调会清空选择，那样用户刚点出来的东西会被自己抹掉。 */
   function closeQuiet() {
     if (root) root.classList.add('hidden');
-    S.grid = false;
+    setMode('single', 'grid-close');
     // 不要清 onDone：清掉以后用户再按 Esc，close() 就找不到回调，
     // 选择永远清不掉 —— 表现为「退出了多图模式，左边还挂着一排选中」。
     // 回调本身只关心 what 是什么，重复调用是安全的。
@@ -265,7 +266,7 @@ const DecideGrid = (() => {
     // 提交走的是"直接藏起来"，没经过 close()/closeQuiet()，别忘了清标记。
     // 漏了的话 S.grid 一直是 true，keys.js 会把之后的每一个键都吞掉 ——
     // 表现为"提交完多图之后，左右键、z、G、? 全都没反应"（端到端测试抓到的）。
-    S.grid = false;
+    setMode('single', 'grid-close');
     const msg = picks.length
       ? `留下 ${picks.length} 张${marked.length ? `（精选 ${marked.length}）` : ''}，${rest.length} 张不过`
       : `${ids.length} 张全部不过`;
@@ -421,12 +422,10 @@ function isZoomed() {
     return false;
   }
 
-  // 捕获阶段监听：网格开着的时候先拿到按键，其余时候完全放行。
-  // 这样不用改 keys.js，也不会在网格关着时抢走任何一个键。
-  window.addEventListener('keydown', (e) => {
-    if (!root || root.classList.contains('hidden')) return;
-    if (onKey(e)) { e.stopPropagation(); }
-  }, true);
+  // 键位交给 mode 模块统一分派：网格打开时 keys.js 会把所有键转到这里，
+  // 关闭时它一次性让路。不再自己监听 keydown —— 两个监听器各自判断
+  // "该不该管"，正是当初多图和单图互相抢键的结构性原因。
+  registerMultiKeys(onKey);
 
   return { open, close, closeQuiet, commit, onKey,
            isOpen: () => !!root && !root.classList.contains('hidden') };
