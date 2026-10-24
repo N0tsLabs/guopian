@@ -379,7 +379,32 @@ function drawProgPanel(p) {
         <div class="progBar2"><i style="width:${Math.round(100 * n / mx)}%"></i></div>`);
     });
   }
+  // 面板底部：全部重新分析。
+  // 只在"没在跑"的时候给按钮 —— 分析中再点一次没有任何意义。
+  const running = !!(p && p.running);
+  rows.push(`<div class="progFoot">
+      <button class="btn ghost small" id="progReanalyze" ${running ? "disabled" : ""}>
+        全部重新分析</button>
+      <span class="progHint">${running ? "分析中…" : "照片不会被移动或删除"}</span>
+    </div>`);
   panel.innerHTML = rows.join('');
+  const btn = panel.querySelector('#progReanalyze');
+  if (btn) btn.onclick = (ev) => { ev.stopPropagation(); reanalyzeAll(btn); };
+}
+
+/** 全部重新分析：清掉分析结果重跑一遍（等价于重新打开一个没分析过的库）。 */
+async function reanalyzeAll(btn) {
+  const old = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '重置中…'; }
+  try {
+    const r = await api('/api/reanalyze', { method: 'POST', body: '{}' });
+    if (!r.ok) { toast(r.error || '无法重新分析', 'err'); if (btn) { btn.disabled = false; btn.textContent = old; } return; }
+    if (_progOpen) toggleProgPanel();
+    await enter();          // 走统一入口：整页进度条会重新出现
+  } catch (e) {
+    toast('无法重新分析', 'err');
+    if (btn) { btn.disabled = false; btn.textContent = old; }
+  }
 }
 
 let _progOpen = false;

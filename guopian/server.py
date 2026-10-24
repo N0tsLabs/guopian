@@ -437,6 +437,20 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
         lib.cancel()
         return jsonify({"ok": True})
 
+    @app.post("/api/reanalyze")
+    def reanalyze():
+        """全部重新分析：清掉分析标记后走一遍完整流程（扫描→分析→特征→分组）。"""
+        lib, err = need_lib()
+        if err:
+            return err
+        if lib.read_only:
+            return jsonify({"ok": False, "error": "这个项目是按只读打开的"}), 409
+        if lib.progress.phase in ('scan', 'analyze', 'embed', 'evaluate') or lib.embedding():
+            return jsonify({"ok": False, "error": "已经在分析了"}), 409
+        n = lib.reset_analysis()
+        lib.start()
+        return jsonify({"ok": True, "reset": n, "progress": lib.progress.snap()})
+
     @app.post("/api/recompute")
     def recompute():
         lib, err = need_lib()

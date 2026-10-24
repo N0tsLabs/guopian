@@ -286,9 +286,15 @@ def evaluate(row: dict, face_rows: list[dict], calib: dict,
         # 实测是云彩/布料被误检成脸（#1215 那张云，MAR 读到 0.31）——
         # 这种"脸"不该产生任何表情结论。
         mar_sane = mar is None or mar <= config.MOUTH_MAR_MAX
-        mouth_open = mar_sane and (
-            (mar is not None and mar >= config.MOUTH_MAR_OPEN) or
-            (mar is None and jaw > config.MOUTH_OPEN))
+        # 两个信号都指向"张嘴"才算：几何量 MAR（上下唇间距 / 眼距）和 blendshape
+        # jawOpen。只用一个会互相打架 —— jawOpen 在闭嘴的照片上读到过 0.61，
+        # 而 MAR 在涂了厚妆的脸上会偏高（京剧妆那张闭嘴照读到 0.18）。
+        # 两者同时高，基本就是真张嘴。
+        if mar is None:
+            mouth_open = mar_sane and jaw > config.MOUTH_OPEN
+        else:
+            mouth_open = mar_sane and mar >= config.MOUTH_MAR_OPEN \
+                and jaw >= config.MOUTH_JAW_AGREE
         if mouth_open and smile < 0.2:
             conf = min(0.9, (mar or jaw))
             detail = ("张嘴度 MAR {:.3f}".format(mar) if mar is not None

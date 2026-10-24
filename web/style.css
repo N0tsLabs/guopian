@@ -1952,3 +1952,16 @@ body .listItem.sel::before{
   content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
   background:var(--accent);
 }
+
+/* 顶栏进度条整块可点（点开分类明细）—— 必须让它在视觉上说得出这句话 */
+#progressWrap{cursor:pointer}
+#progressWrap:hover .progressText{color:var(--ink)}
+#progressWrap:hover .progressBar{background:var(--line-2, #3a3a3a)}
+.progressText::after{content:" ▾";font-size:9px;opacity:.45;margin-left:2px}
+#progressWrap:hover .progressText::after{opacity:.9}
+
+/* 明细面板底部：全部重新分析 */
+.progFoot{display:flex;align-items:center;gap:var(--s3);margin-top:var(--s4);
+  padding-top:var(--s3);border-top:1px solid var(--line)}
+.progFoot .progHint{font-size:11px;color:var(--ink-3)}
+.btn.small{height:26px;padding:0 10px;font-size:12px}

@@ -448,6 +448,16 @@ class Library:
         return {"photos": len(rows), "groups": len(groups), "suggest": tally,
                 "calibration": calib}
 
+    def reset_analysis(self) -> int:
+        """把"分析过"的标记清掉，下一趟 start() 就会从零重新分析。
+
+        只清 analysis_version —— 判定（decision）、别名、catalog 身份都不动，
+        所以重新分析不会丢用户已经做过的过片选择。
+        """
+        cur = self.store.conn.execute("UPDATE photos SET analysis_version = 0")
+        self.store.conn.commit()
+        return cur.rowcount or 0
+
     # -------------------------------------------------------------- driver
 
     def run_full(self):
