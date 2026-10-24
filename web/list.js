@@ -429,12 +429,17 @@ async function syncGrid() {
           // 否则左侧还挂着一排选中，右侧已经是单图了。
           S.sel.clear();
           S.multi = false;
+          renderList();   // 只 render() 不会重画列表，高亮会留在原地
           render();
           return;
         }
         if (what !== 'commit') { render(); return; }
         const decided = new Set(S.sel);
         S.sel.clear();
+        // 提交后必须重画左侧列表：render() 只管右侧那张照片卡片，
+        // 不重画列表的话，刚选中的那几行会一直挂着高亮 —— 用户看到的就是
+        // "已经确认了结果，左边还是一片选中的样子"。
+        renderList();
 
         // 提交以后落到「第一个还没决策的」。不是简单 +1：
         // 选了 1,2,3,5,6，刚决定完的只有那五张，4 还没碰过 ——
@@ -452,6 +457,7 @@ async function syncGrid() {
         }
         if (next < 0 && lastPos >= 0) next = Math.min(S.queue.length - 1, lastPos + 1);
         if (next >= 0) S.idx = next;
+        renderList();   // S.idx 变了，高亮要跟着走
         render();
       });
     } else if (DecideGrid.isOpen()) {
