@@ -204,6 +204,36 @@ function buildRows(queue) {
   return rows;
 }
 
+/* 列表真正显示的顺序（相似组聚在一起、组内按排名）。
+ *
+ * 这个顺序必须同时是 S.queue 的顺序。之前不是：列表在渲染时把组员拉在一起，
+ * 而 S.queue 还是服务器给的顺序，于是键盘按 S.idx 走的是另一条路线 ——
+ * 用户看到的就是"按下一张，跳到这个组的最后一张，再跳回第一张、第二张"，
+ * 顺序完全乱。现在只保留一个顺序，导航和显示不可能再对不上。
+ */
+function orderQueue(queue) {
+  const out = [];
+  const byGroup = new Map();
+  queue.forEach((c, i) => {
+    const gid = (c.group_size || 0) > 1 && c.group_id != null ? c.group_id : null;
+    if (gid == null) return;
+    if (!byGroup.has(gid)) byGroup.set(gid, []);
+    byGroup.get(gid).push(c);
+  });
+  const emitted = new Set();
+  queue.forEach((c) => {
+    const gid = (c.group_size || 0) > 1 && c.group_id != null ? c.group_id : null;
+    if (gid == null) { out.push(c); return; }
+    if (emitted.has(gid)) return;
+    emitted.add(gid);
+    byGroup.get(gid)
+      .slice()
+      .sort((a, b) => (a.group_rank || 0) - (b.group_rank || 0))
+      .forEach((m) => out.push(m));
+  });
+  return out;
+}
+
 function groupHeadHTML(gid, members) {
   const first = members[0].c;
   const col = first.group_color == null ? 0 : first.group_color;
@@ -452,7 +482,7 @@ window.addEventListener('guopian:gridcancel', () => {
   render();
 });
 
-export { posKey, savedPos, savePos, sessKey, savedSession, saveSession,
+export { orderQueue, posKey, savedPos, savePos, sessKey, savedSession, saveSession,
          pickStartIndex, itemHTML, observeThumbs,
   renderList, renderListSummary, highlightCurrent, updateListProgress,
   markListItem, configure

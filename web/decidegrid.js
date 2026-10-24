@@ -62,7 +62,18 @@ const DecideGrid = (() => {
       + '<div class="dgZoomBadge"></div>'
       + '<div class="dgZoomHint">← → 切换 · K 留下 · S 精选 · 空格 / Esc 关闭</div>';
     document.body.appendChild(zoomEl);
-    zoomEl.onclick = () => closeZoom();
+    // 点空白处关闭 —— 但放大/拖动之后不能一松手就关掉，双击也不能先关再还原
+  // （click 事件总在 dblclick 之前来）。所以只在"没放大、刚才是单击、且没拖"
+  // 的情况下关。
+  let downAt = null, moved = false;
+  zoomEl.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; moved = false; });
+  zoomEl.addEventListener('pointermove', (e) => {
+    if (downAt && (Math.abs(e.clientX - downAt[0]) > 4 || Math.abs(e.clientY - downAt[1]) > 4)) moved = true;
+  });
+  zoomEl.addEventListener('click', () => {
+    if (zs <= 1.01 && !moved) closeZoom();
+    downAt = null;
+  });
     $('#dgEsc', root).onclick = () => close();
     $('#dgCommit', root).onclick = () => commit();
 
@@ -150,6 +161,9 @@ const DecideGrid = (() => {
   async function open(selectedIds, done) {
    try {
     build();
+    // 多图模式正在进行。keys.js 靠这个标记让路 —— 否则空格/左右键还在
+    // 悄悄决定左边列表里的"当前那张"，而用户以为自己在看多图。
+    S.grid = true;
     ids = selectedIds.slice();
     onDone = done || null;
     focus = 0;
@@ -191,7 +205,7 @@ const DecideGrid = (() => {
       el.className = 'dgTile';
       el.dataset.id = id;
       el.innerHTML = `
-        <img src="${imgUrl(id, 'small')}" alt="" draggable="false">
+        <img src="${imgUrl(id, 'card')}" alt="" draggable="false">
         <span class="dgFlag"></span>
         <span class="dgActions">
           <button class="dgKeep" data-act="keep">留下</button>
@@ -211,6 +225,7 @@ const DecideGrid = (() => {
   /** 用户按 Esc / 点取消：退出并把选择清空。 */
   function close() {
     if (root) root.classList.add('hidden');
+    S.grid = false;
     // 广播，不等回调 —— onDone 可能已经被上一次 close 或 syncGrid 用掉了，
     // 那样用户按 Esc 之后左侧的选择就清不掉（表现为"退出了多图，左边还亮着"）。
     window.dispatchEvent(new CustomEvent('guopian:gridcancel'));
@@ -221,6 +236,7 @@ const DecideGrid = (() => {
    *  不跑回调 —— 回调会清空选择，那样用户刚点出来的东西会被自己抹掉。 */
   function closeQuiet() {
     if (root) root.classList.add('hidden');
+    S.grid = false;
     // 不要清 onDone：清掉以后用户再按 Esc，close() 就找不到回调，
     // 选择永远清不掉 —— 表现为「退出了多图模式，左边还挂着一排选中」。
     // 回调本身只关心 what 是什么，重复调用是安全的。
@@ -273,10 +289,61 @@ function paintZoom() {
   if (id == null) return;
   const img = zoomEl.querySelector('img');
   img.src = imgUrl(id, 'card');
+  zoomSetup();
+  resetZoom();
   const p = stateOf(id);
   const badge = zoomEl.querySelector('.dgZoomBadge');
   badge.textContent = p === 'mark' ? '★ 精选' : (p === 'keep' ? '✓ 留下' : '');
   badge.className = 'dgZoomBadge' + (p ? ' on' : '') + (p === 'mark' ? ' mark' : '');
+}
+
+/* 放大层里的缩放与拖动。
+ *
+ * 之前点开只有一张贴满屏的静态图：既不能放大看眼神，也不能拖动看边角，
+ * 和"图片查看器"差得远。现在滚轮缩放、按住拖动、双击还原。
+ */
+let zs = 1, zx = 0, zy = 0;
+
+function applyZoom() {
+  const img = zoomEl && zoomEl.querySelector('img');
+  if (!img) return;
+  img.style.transform = `translate(${zx}px, ${zy}px) scale(${zs})`;
+  img.style.cursor = zs > 1.01 ? 'grab' : 'zoom-in';
+}
+
+function resetZoom() { zs = 1; zx = 0; zy = 0; applyZoom(); }
+
+function zoomSetup() {
+  if (!zoomEl || zoomEl.__zoomWired) return;
+  zoomEl.__zoomWired = true;
+  zoomEl.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const k = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    zs = Math.max(1, Math.min(8, zs * k));
+    if (zs <= 1.01) { zx = 0; zy = 0; }
+    applyZoom();
+  }, { passive: false });
+  let drag = null;
+  zoomEl.addEventListener('pointerdown', (e) => {
+    if (zs <= 1.01) return;
+    drag = { x: e.clientX - zx, y: e.clientY - zy };
+    zoomEl.setPointerCapture(e.pointerId);
+    zoomEl.style.cursor = 'grabbing';
+  });
+  zoomEl.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    zx = e.clientX - drag.x; zy = e.clientY - drag.y;
+    applyZoom();
+  });
+  const end = (e) => {
+    if (!drag) return;
+    drag = null;
+    try { zoomEl.releasePointerCapture(e.pointerId); } catch {}
+    zoomEl.style.cursor = zs > 1.01 ? 'grab' : 'zoom-in';
+  };
+  zoomEl.addEventListener('pointerup', end);
+  zoomEl.addEventListener('pointercancel', end);
+  zoomEl.addEventListener('dblclick', (e) => { e.stopPropagation(); resetZoom(); });
 }
 
 function closeZoom() {

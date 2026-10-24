@@ -52,6 +52,12 @@ function onKeyDown(e) {
     return;
   }
   if (overlayOpen()) return;
+  // 多图对比（DecideGrid）开着的时候，单图那套快捷键必须先让路。
+  //
+  // 否则就是实测到的那个严重 bug：用户在多图里按空格/左右，界面看着没动，
+  // 左边列表却在"精选"别的照片、还一路切走当前那张。多图有自己的按钮，
+  // 单图的键在这里一个都不该生效。
+  if (S.grid) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   // Only the HOME screen ignores shortcuts. This used to test whether
   // #appView was hidden -- but openGrid() hides it too, so opening the grid

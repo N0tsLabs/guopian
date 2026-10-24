@@ -334,8 +334,9 @@ code{font:400 11.5px var(--mono);color:var(--ink-2);
 .progressWrap:hover .progressBar{background:var(--line-strong)}
 
 /* 点开以后的分类明细 */
+/* 位置由 app.js 按进度条的位置算（贴着它下方展开），这里只给尺寸和外观 */
 .progPanel{
-  position:fixed;right:12px;top:44px;z-index:70;width:268px;
+  position:fixed;z-index:70;width:300px;
   background:var(--surface-2);border:1px solid var(--line-strong);
   border-radius:10px;padding:10px 12px;box-shadow:0 18px 50px rgba(0,0,0,.5);
 }

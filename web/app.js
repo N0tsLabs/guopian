@@ -38,7 +38,7 @@ import { fitStage, layerTransform, setCardOffset, onWheel, onDblClick,
          configure as configureView } from './view.js';
 import { physReset, setDragProgress, onStageDown, onDragMove, onDragEnd,
          cancelDrag, configure as configurePhysics } from './physics.js';
-import { renderList, renderListSummary, markListItem, pickStartIndex,
+import { orderQueue, renderList, renderListSummary, markListItem, pickStartIndex,
          savedSession, saveSession, configure as configureList } from './list.js';
 import { render, renderActionState, renderDecisionBadge, placeStamp,
          configure as configureCard } from './card.js';
@@ -418,7 +418,19 @@ function toggleProgPanel() {
   }
   _progOpen = !_progOpen;
   el.progPanel.classList.toggle('hidden', !_progOpen);
-  if (_progOpen) drawProgPanel(S.lastProgress || {});
+  if (!_progOpen) return;
+  drawProgPanel(S.lastProgress || {});
+  // 贴在进度条正下方、左对齐展开。
+  //
+  // 之前是写死的 right:12px;top:44px —— 弹框跑到了屏幕右边，离点它的
+  // 地方隔着一整条界面，用户第一反应是"点了没反应"。弹框要贴着它的锚点。
+  const anchor = document.getElementById('progressWrap');
+  if (!anchor) return;
+  const r = anchor.getBoundingClientRect();
+  const w = Math.min(320, window.innerWidth - 24);
+  el.progPanel.style.width = w + 'px';
+  el.progPanel.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+  el.progPanel.style.top = Math.round(r.bottom + 6) + 'px';
 }
 
 function renderProgress(p) {
@@ -479,7 +491,10 @@ async function loadQueue() {
   let q;
   try { q = await api(`/api/queue?filter=${encodeURIComponent(S.filter)}&sort=${encodeURIComponent(S.sort)}`); }
   catch (e) { return; }
-  S.queue = q.items || [];
+  // 用列表真正显示的顺序（相似组聚在一起、组内按排名），而不是服务器顺序。
+  // 两套顺序并存时，键盘按 S.idx 走一条、眼睛看的是另一条 —— 那就是"按下一张
+  // 却跳到组里最后一张、再跳回第一张"的来源。
+  S.queue = orderQueue(q.items || []);
   S.idx = pickStartIndex();
   renderList();
   render();
