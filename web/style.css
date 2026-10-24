@@ -1956,7 +1956,7 @@ body .listItem.sel::before{
 /* 顶栏进度条整块可点（点开分类明细）—— 必须让它在视觉上说得出这句话 */
 #progressWrap{cursor:pointer}
 #progressWrap:hover .progressText{color:var(--ink)}
-#progressWrap:hover .progressBar{background:var(--line-2, #3a3a3a)}
+#progressWrap:hover .progressBar{background:var(--surface-3)}
 .progressText::after{content:" ▾";font-size:9px;opacity:.45;margin-left:2px}
 #progressWrap:hover .progressText::after{opacity:.9}
 
