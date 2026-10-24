@@ -262,6 +262,10 @@ const DecideGrid = (() => {
 
     ids.forEach((id) => { const c = cards.get(id); if (c) delete c.__gridPick; });
     root.classList.add('hidden');
+    // 提交走的是"直接藏起来"，没经过 close()/closeQuiet()，别忘了清标记。
+    // 漏了的话 S.grid 一直是 true，keys.js 会把之后的每一个键都吞掉 ——
+    // 表现为"提交完多图之后，左右键、z、G、? 全都没反应"（端到端测试抓到的）。
+    S.grid = false;
     const msg = picks.length
       ? `留下 ${picks.length} 张${marked.length ? `（精选 ${marked.length}）` : ''}，${rest.length} 张不过`
       : `${ids.length} 张全部不过`;
