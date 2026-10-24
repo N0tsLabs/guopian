@@ -415,8 +415,13 @@ const Home = (() => {
 
   function syncOpenButton() {
     const btn = $('#browserOpen');
-    if (btn) btn.textContent = B.curPhotos ? `打开这个文件夹（${B.curPhotos} 张）`
-                                          : '打开这个文件夹';
+    if (!btn) return;
+    // 一定要解掉 disabled：按钮在 HTML 里是 disabled 起手的，只有这里能开。
+    // 上一版重构把 "btn.disabled = false" 弄丢了，结果走到任何目录都点不动 ——
+    // 界面上就是"打开这个文件夹（386 张）"灰着。
+    btn.disabled = false;
+    btn.textContent = B.curPhotos ? `打开当前文件夹（${B.curPhotos} 张）`
+                                  : '打开当前文件夹';
   }
 
   async function navigate(path) {
