@@ -419,7 +419,7 @@ async function syncGrid() {
     if (S.sel.size >= 2) {
       // 每次都重新打开，不是只在没开的时候开：多选一张就要多一个格子，
       // 否则网格会一直停在第一次打开时的数量上。
-      DecideGrid.open(Array.from(S.sel), (what) => {
+      DecideGrid.open(Array.from(S.sel), async (what) => {
         // 只有真的提交了才清空选择。
         // 这个回调在 syncGrid 自己关掉网格时也会跑（比如选中数掉到 1），
         // 那时候如果也清空，就会把用户刚点出来的选择一起抹掉 ——
@@ -457,6 +457,13 @@ async function syncGrid() {
         }
         if (next < 0 && lastPos >= 0) next = Math.min(S.queue.length - 1, lastPos + 1);
         if (next >= 0) S.idx = next;
+        // 从服务器重新读一遍队列，而不是只重画。
+        //
+        // 网格提交时写入的 id 集合和左侧的 S.queue 是两份数据：只重画的话，
+        // 界面上那几行仍然没有"已决策"标记（实测：点了"全部 4 张不过"，
+        // 光标跳到下一张，可那四张在左边看起来还是没标过）。loadQueue() 会
+        // 把真实状态拉回来 —— 标记、进度数字、当前行一次性对齐。
+        await loadQueue();
         renderList();   // S.idx 变了，高亮要跟着走
         render();
       });
