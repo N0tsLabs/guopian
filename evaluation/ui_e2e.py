@@ -227,6 +227,63 @@ async (libSlug, phase) => {
   await wait(300);
   add('Esc 关闭帮助', document.querySelector('#help').classList.contains('hidden'));
 
+  // ── 13. 工具栏与徽章 ──────────────────────────────────────
+  st.S.idx = 0;
+  const keepBefore = st.S.queue.filter((c) => c.decision).length;
+  document.querySelector('.act.keep').click();
+  await wait(900);
+  add('工具栏「过」按钮生效', st.S.queue[0].decision === 'keep',
+      `${keepBefore}→${st.S.queue.filter((c) => c.decision).length}`);
+  const marked = st.S.queue[0];
+  key(' ');
+  await wait(300);
+  key(' ');
+  await wait(900);
+  add('再按空格取消精选', marked.decision === null || marked.decision !== 'mark', String(marked.decision));
+
+  // ── 14. 列表折叠 / 跳到下一张未审 ────────────────────────
+  document.querySelector('#listHide').click();
+  await wait(500);
+  add('L 隐藏列表', document.querySelector('#listPane').classList.contains('hidden')
+      || document.querySelector('#listScroll').offsetWidth === 0);
+  document.querySelector('#listShow').click();
+  await wait(500);
+  add('L 再显示列表', !document.querySelector('#listShow').offsetParent);
+  if (document.querySelector('#listJump')) {
+    document.querySelector('#listJump').click();
+    await wait(900);
+    add('跳到下一张未审后当前行有决策前状态',
+        !!st.S.queue[st.S.idx] && !st.S.queue[st.S.idx].decision, `idx=${st.S.idx}`);
+  }
+
+  // ── 15. 按问题筛选 ───────────────────────────────────────
+  const issueChip = [...document.querySelectorAll('#triageChips .chip')]
+    .find((c) => /\d+$/.test(c.textContent) && c.dataset.f && c.dataset.f.startsWith('issue:'));
+  if (issueChip) {
+    issueChip.click();
+    await wait(1000);
+    const kind = issueChip.dataset.f.slice(6);
+    const allHave = st.S.queue.every((c) => (c.issues || []).some((x) => x.kind === kind));
+    add('按问题筛选后队列全是该问题', st.S.queue.length > 0 && allHave, `${kind} n=${st.S.queue.length}`);
+    const chipAll2 = [...document.querySelectorAll('#triageChips .chip')].find((c) => c.textContent.trim() === '全部');
+    if (chipAll2) chipAll2.click();
+    await wait(700);
+  } else add('按问题筛选（本库无问题项，跳过）', true);
+
+  // ── 16. 人脸框 / 斑马纹 ──────────────────────────────────
+  key('i');
+  await wait(400);
+  const overlayOn = !document.querySelector('#overlay').classList.contains('hidden');
+  key('i');
+  await wait(300);
+  add('I 切换人脸框层', overlayOn !== document.querySelector('#overlay').classList.contains('hidden'), String(overlayOn));
+  key('p');
+  await wait(400);
+  const zebraOn = !document.querySelector('#zebra').classList.contains('hidden');
+  key('p');
+  await wait(300);
+  add('P 切换过曝斑马纹', zebraOn !== document.querySelector('#zebra').classList.contains('hidden'), String(zebraOn));
+
   return JSON.stringify(out);
 }
 """
