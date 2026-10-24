@@ -213,17 +213,28 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
             return jsonify({"ok": False, "error": "没有指定文件夹"}), 400
         if not os.path.isdir(path):
             return jsonify({"ok": False, "error": "不是有效的文件夹:\n{}".format(path)}), 400
+        # 打开时不再问"只读"，也不猜。
+        #
+        # 那个复选框在选文件夹的那一刻要求用户做一个还没法理解的决定（"只读"
+        # 到底是少了什么？），删掉。自动判断也试过：探测文件夹能不能写 —— 但
+        # 探测本身会被运行环境误导（进程权限低时明明能写的目录也报只读），
+        # 结果会静默把应用切进只读，那是更糟的失败方式。
+        # 只保留命令行 --read-only 这条显式入口。
+        explicit = body.get("read_only")
+        read_only = bool(explicit) if explicit is not None else sess.read_only
+        writable = True
         try:
             lib = sess.open(path,
                             work_dir=body.get("work_dir") or None,
-                            read_only=bool(body.get("read_only", sess.read_only)),
+                            read_only=read_only,
                             scan=not bool(body.get("no_scan")))
         except Exception as e:
             return jsonify({"ok": False, "error": "{}: {}".format(type(e).__name__, e)}), 500
         return jsonify({"ok": True, "generation": sess.generation,
                         "root": lib.root, "work_dir": lib.work_dir,
                         "slug": paths.slug(lib.root),
-                        "read_only": bool(lib.read_only)})
+                        "read_only": bool(lib.read_only),
+                        "writable": writable})
 
     @app.post("/api/close")
     def close_library():
@@ -823,6 +834,22 @@ def _faces_ok() -> dict:
 
     ok, msg = faces_mod.available()
     return {"ok": ok, "message": msg}
+
+
+def _writable(folder: str) -> bool:
+    """这个文件夹我们能不能往里写（决定要不要自动只读打开）。
+
+    用"真建一个临时文件再删掉"来判断，而不是 os.access：Windows 上访问控制
+    列表和只读介质都可能让 access 说可以、实际写入却失败。
+    """
+    probe = os.path.join(folder, ".guopian_write_test")
+    try:
+        with open(probe, "w", encoding="utf-8") as fh:
+            fh.write("ok")
+        os.remove(probe)
+        return True
+    except OSError:
+        return False
 
 
 def _catalog_key(lib) -> str:

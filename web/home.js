@@ -481,15 +481,6 @@ const Home = (() => {
           <path d="M12 19V5M5 12l7-7 7 7"/></svg></span>
         <span class="nm">上一级</span></button>`);
     }
-    if (unknown || d.photos > 0) {
-      rows.push(`<button class="dirRow ${unknown ? '' : 'has'}" data-p="${esc(d.path)}" data-self="1">
-        <span class="ico"><svg viewBox="0 0 24 24" width="17" height="17" fill="none"
-          stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-          <rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="8.7" cy="9.6" r="1.6"/>
-          <path d="M4 16.5l4.6-4.3 3.5 3.2 3-2.7 4.9 4.3"/></svg></span>
-        <span class="nm">就用这个文件夹</span>
-        <span class="cnt">${unknown ? '…' : d.photos + ' 张照片'}</span></button>`);
-    }
     for (const sub of d.dirs) {
       const known = sub.photos != null;
       rows.push(`<button class="dirRow ${known && sub.photos ? 'has' : ''}" data-p="${esc(sub.path)}">
@@ -501,16 +492,7 @@ const Home = (() => {
     $('#dirList').innerHTML = rows.length ? rows.join('')
       : '<div class="dirEmpty">这个文件夹是空的，也没有子文件夹</div>';
     $('#dirList').querySelectorAll('.dirRow').forEach(el => {
-      el.onclick = () => {
-        if (el.dataset.self === '1') {
-          openLibrary(el.dataset.p, $('#roToggle').checked);
-          closeBrowser();
-        } else if (el.classList.contains('up') || !el.classList.contains('has')) {
-          navigate(el.dataset.p);
-        } else {
-          navigate(el.dataset.p);
-        }
-      };
+      el.onclick = () => navigate(el.dataset.p);
     });
   }
 
@@ -522,7 +504,7 @@ const Home = (() => {
     $('#browserCancel').onclick = closeBrowser;
     $('#browserOpen').onclick = () => {
       if (!B.picked) return;
-      openLibrary(B.picked, $('#roToggle').checked);
+      openLibrary(B.picked);
       closeBrowser();
     };
     $('#browser').onclick = (e) => { if (e.target.id === 'browser') closeBrowser(); };
@@ -589,7 +571,7 @@ const Home = (() => {
       const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
       const path = f && (f.path || (window.guopianPathFor && window.guopianPathFor(f)));
       if (path) {
-        openLibrary(path, $('#roToggle') ? $('#roToggle').checked : false);
+        openLibrary(path);
       } else {
         toast('浏览器没有把文件夹路径给我们，请用「打开照片文件夹」按钮', 'warn');
       }
