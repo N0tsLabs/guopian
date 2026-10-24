@@ -30,6 +30,8 @@ const S = {
   // 'pending' a finished project showed an empty list and no way back.
   filter: 'all', sort: 'time',
   sel: new Set(),
+  selAnchor: null,
+  shiftAnchor: null,
   busy: false, poll: null, generation: -1,
 };
 

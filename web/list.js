@@ -269,15 +269,24 @@ function renderList() {
       // 和文件资源管理器一样：修饰键要按着才算数，松开就是普通点击。
       // 我上一版做成了"Ctrl+点一次就进入粘性多选"，那是错的 ——
       // 松开 Ctrl 之后普通点击又会清空，两种行为混在一起只会让人摸不着头脑。
-      if (e.shiftKey && S.selAnchor != null) {
-        // Shift：从锚点到这一行，整段加入
-        const a = Math.min(S.selAnchor, i);
-        const b = Math.max(S.selAnchor, i);
+      // Shift：从"正在看的那张"到这一行，整段加入。
+      //
+      // 之前起点用的是 S.selAnchor（上次 Ctrl+点的那张）。用户先 Ctrl 选了一堆
+      // 照片、再在很靠后的位置按 Shift，起点还是最早那张 —— 结果一口气把从头
+      // 到现在的全选上了。起点应该是当前正在看的照片。
+      // 连续 Shift+点保持同一个起点（像资源管理器那样扩展选区）；
+      // 任何别的点击都把起点清掉。
+      if (e.shiftKey) {
+        const anchor = S.shiftAnchor != null ? S.shiftAnchor : S.idx;
+        S.shiftAnchor = anchor;
+        const a = Math.min(anchor, i);
+        const b = Math.max(anchor, i);
         for (let k = a; k <= b; k++) {
           const kid = S.queue[k] && S.queue[k].id;
           if (kid != null) S.sel.add(kid);
         }
       } else if (e.ctrlKey || e.metaKey) {
+        S.shiftAnchor = null;
         // 按住 Ctrl 点击：加一张或去掉一张。
         // 第一次按 Ctrl 点的时候，把「当前正在看的那张」一起选上 ——
         // 否则第一次只选中一张，进不了多图模式，要等第二次点击才生效。
@@ -293,6 +302,7 @@ function renderList() {
         // 没按修饰键：清空选择，回到单选
         if (S.sel.size) S.sel.clear();
         S.selAnchor = i;
+        S.shiftAnchor = null;
       }
       S.multi = false;
 
