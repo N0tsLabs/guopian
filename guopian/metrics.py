@@ -62,6 +62,53 @@ def _hf_ratio(gray: np.ndarray) -> float:
     return float(F[r > cut].sum() / total)
 
 
+def _lap_var_best(gray: np.ndarray, blocks: int = 6) -> float:
+    """把画面切成 blocks×blocks 块，取各块 Laplacian 方差的 90 分位。
+
+    不取 max：某一小块噪点或一根锐边就足以让整张虚焦的图看起来"有一处清楚"。
+    取 90 分位既要求"确实有一片区域是实的"，又不会被单个小块骗过。
+    """
+    h, w = gray.shape
+    th, tw = max(24, h // blocks), max(24, w // blocks)
+    vals: list[float] = []
+    for y in range(0, max(1, h - th + 1), th):
+        for x in range(0, max(1, w - tw + 1), tw):
+            tile = gray[y:y + th, x:x + tw]
+            if tile.size >= 400:
+                vals.append(_lap_var(tile))
+    if not vals:
+        return _lap_var(gray)
+    vals.sort()
+    return float(vals[min(len(vals) - 1, int(len(vals) * 0.9))])
+
+
+def _noise_flat(gray: np.ndarray, blocks: int = 16) -> float:
+    """噪声只在**平坦区域**里量。
+
+    Donoho-Johnstone 那个基于全图水平差分的估计，会把布料纹理、亮片、头发
+    丝也当成噪声 —— 实测 ISO 100 的粉色背心被读到"噪点偏高 65%"，因为它
+    满身是细纹理。而真实传感器噪声的特点是"到处都有"，纹理只在某些块里有。
+    所以按块算差分 MAD，取最低的那一档（10 分位）当噪声底。
+    """
+    if gray.size < 4096:
+        return 0.0
+    h, w = gray.shape
+    th, tw = max(16, h // blocks), max(16, w // blocks)
+    vals: list[float] = []
+    for y in range(0, max(1, h - th + 1), th):
+        for x in range(0, max(1, w - tw + 1), tw):
+            tile = gray[y:y + th, x:x + tw].astype(np.float32)
+            if tile.size < 256:
+                continue
+            d = np.diff(tile, axis=1)
+            mad = np.median(np.abs(d - np.median(d)))
+            vals.append(1.4826 * mad / math.sqrt(2.0))
+    if not vals:
+        return _noise_sigma(gray)
+    vals.sort()
+    return float(vals[max(0, int(len(vals) * 0.1) - 1)])
+
+
 def _noise_sigma(gray: np.ndarray) -> float:
     """Robust noise estimate from horizontal first differences (Donoho-Johnstone style)."""
     if gray.size < 4096:
@@ -158,6 +205,12 @@ def global_metrics(gray: np.ndarray, full_w: int, full_h: int) -> dict:
 
     lv = _lap_var(gray)
     mp = max(0.01, (full_w * full_h) / 1_000_000.0)
+    # 清晰度取"最清楚的那块"，不是整张图的平均。
+    #
+    # 全局 Laplacian 方差会被大面积的虚化背景拉平：一张人像特写脸很锐、
+    # 背景糊成一片，全图方差照样很低 —— 实测就是这样把一堆看着挺清楚的
+    # 特写判成了"失焦"。人眼判断"这张糊不糊"看的是有没有一处是实的。
+    sharp_best = _lap_var_best(gray)
     tilt, tilt_sup = _tilt_deg(gray)
 
     return {
@@ -166,8 +219,8 @@ def global_metrics(gray: np.ndarray, full_w: int, full_h: int) -> dict:
         "pct_low": float((gray <= config.PCT_LOW_LEVEL).mean() * 100.0),
         "dynamic_range": float(p99 - p1),
         "rms_contrast": float(gray.std()),
-        "lap_var": float(lv),
-        "lap_var_mp": float(lv * mp),
+        "lap_var": float(lv),                    # 全图（留作参考/排查用）
+        "lap_var_mp": float(sharp_best * mp),     # 最清楚的那块 —— 判定用它
         "tenengrad": _tenengrad(gray),
         "hf_ratio": _hf_ratio(gray),
         "noise": _noise_sigma(gray),
