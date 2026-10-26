@@ -6,13 +6,14 @@
 
 用法：python evaluation/ui_e2e.py
 它会：
-  1. 造一个临时照片库（从 D:\\image cache 里复制少量照片）并用 /api/open 打开
+  1. 造一个临时照片库（复制 evaluation/testset 里的照片，没有就现场合成）并用 /api/open 打开
   2. 调 bridge 在页面里跑一整段脚本，返回每条用例的结果
   3. 打印结果表，有失败则退出码 1
   4. 删掉临时库（照片是复制的，原件不动）
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import shutil
@@ -25,8 +26,43 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 BASE = "http://127.0.0.1:8765"
 LIB = os.path.join(ROOT, ".cache", "e2e-lib")
-SRC = r"D:\image cache\川西\100MSDCF\过"
 PY = sys.executable
+
+# 照片从哪来，按顺序找：
+#   1. --src 指定的目录（推荐：evaluation/make_testset.py 生成的那套）
+#   2. evaluation/testset（如果跑过 make_testset.py）
+#   3. 都��有就现场合成 12 张纯色渐变图 —— 测试只关心界面与流程，不关心拍到什么。
+# 这里**绝不能**写死任何人的真实照片目录：仓库是公开的。
+def pick_source(arg_src=None):
+    if arg_src:
+        if not os.path.isdir(arg_src):
+            raise SystemExit("--src 不是目录: " + arg_src)
+        return arg_src, "命令行指定"
+    ts = os.path.join(ROOT, "evaluation", "testset")
+    if os.path.isdir(ts):
+        return ts, "evaluation/testset"
+    return None, "现场合成"
+
+
+def synth_photos(dest, n=12):
+    """没有现成照片时，合成 n 张不同的渐变图，让流程能跑起来。"""
+    from PIL import Image, ImageDraw
+    os.makedirs(dest, exist_ok=True)
+    for i in range(n):
+        w, h = 1200, 800
+        img = Image.new("RGB", (w, h))
+        px = img.load()
+        for y in range(h):
+            for x in range(0, w, 8):
+                r = (x * 255 // w + i * 20) % 256
+                g = (y * 255 // h + i * 40) % 256
+                for dx in range(8):
+                    if x + dx < w:
+                        px[x + dx, y] = (r, g, (i * 60) % 256)
+        d = ImageDraw.Draw(img)
+        d.ellipse((w // 3, h // 3, w // 3 + 300, h // 3 + 260), fill=(240, 240, 240))
+        img.save(os.path.join(dest, "e2e_{:03d}.jpg".format(i + 1)), quality=88)
+    return n
 
 
 def _post(path, body=None):
@@ -57,13 +93,18 @@ def wait_ready():
     return False
 
 
-def make_lib(n=12):
+def make_lib(src, n=12):
     if os.path.isdir(LIB):
         shutil.rmtree(LIB, ignore_errors=True)
     os.makedirs(LIB, exist_ok=True)
-    files = sorted(f for f in os.listdir(SRC) if f.lower().endswith((".jpg", ".jpeg")))[:n]
+    if src is None:
+        return synth_photos(LIB, n)
+    files = sorted(f for f in os.listdir(src)
+                   if f.lower().endswith((".jpg", ".jpeg", ".png")))[:n]
+    if not files:
+        return synth_photos(LIB, n)
     for f in files:
-        shutil.copy2(os.path.join(SRC, f), os.path.join(LIB, f))
+        shutil.copy2(os.path.join(src, f), os.path.join(LIB, f))
     return len(files)
 
 
@@ -294,8 +335,13 @@ def main():
     if not wait_ready():
         print("服务没起来：请先 python run.py --no-open")
         return 2
-    n = make_lib()
-    print(f"临时库：{n} 张 -> {LIB}")
+    ap = argparse.ArgumentParser(description="浏览器端到端测试（需要 bridge.py 连上浏览器）")
+    ap.add_argument("--src", default=None,
+                    help="造临时库用的照片目录；省略则用 evaluation/testset，没有就现场合成")
+    a = ap.parse_args()
+    src, how = pick_source(a.src)
+    n = make_lib(src)
+    print(f"临时库：{n} 张（来源：{how}） -> {LIB}")
     try:
         js_path = os.path.join(ROOT, ".cache", "_e2e_body.js")
         with open(js_path, "w", encoding="utf-8") as f:

@@ -24,8 +24,8 @@ guopian.portable
 models/*.task
 models/*.onnx
 
-# 运行日志写在 user_data_dir() 里，不在仓库中。它会记下用户的真实目录路径
-# （D:\image cache\...），而仓库是公开的，所以绝不能提交。
+# 运行日志写在 user_data_dir() 里，不在仓库中：它会记下用户自己的文件夹路径，
+# 而仓库是公开的，所以绝不能提交。
 *.log
 
 # 本地评估数据 —— 你自己的照片永远不该进仓库
