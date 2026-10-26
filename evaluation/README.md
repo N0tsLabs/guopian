@@ -20,7 +20,6 @@ python run.py "D:\你的照片文件夹" --read-only
 | `make_testset.py` | 生成一套合成测试照片（每类缺陷各一张），用来快速确认流程没坏 |
 | `run_report.py` | 跑完整流程并打印一张表：每张照片的指标、问题、建议 |
 | `bench.py` | 性能基准：单张各阶段耗时 + 不同线程数的吞吐 |
-| `api_test.py` | 打真实 HTTP 接口，验证首页 / 目录浏览 / 打开库 / 决策 / 只读保护 |
 | `list_test.py` | 逐个筛选检查左侧列表拿到什么（复现"全选完后列表变空"那类问题） |
 | `web_smoke.js` | **不需要浏览器**：用 Node 搭 DOM 桩，喂真实 API 数据把前端模块跑一遍，抓白屏类 bug。它自己解析 `import`/`export`，按 import 图的顺序逐模块加载（每个模块一个作用域，不拍平） |
 | `web_check.py` | **不需要浏览器**：交叉检查 JS 引用的 id 是否都在 HTML、切换的 class 是否都有 CSS |
@@ -30,13 +29,14 @@ python run.py "D:\你的照片文件夹" --read-only
 | `layout_audit.js` | 配合 `bridge.py` 用：把界面的真实尺寸量出来（行高、面板宽、溢出） |
 | `anim_check.py` | 核验三种决策动效：选择器是否匹配、关键帧是否在、**JS 等待时长是否 ≥ 动画时长** |
 | `zoom_sharpness.py` | 比对放大后的画面与磁盘原文件的逐像素差（MAD + 对齐搜索） |
+| `full_check.py` | **全量自检**：37 个接口 + 数据一致性 + 删除流程。跑完给出通过/失败清单 |
+| `ui_e2e.py` | **浏览器端到端**：真实浏览器里逐项操作与断言（选文件夹、分析、导航、决定、多选、多图、弹框）。需要 `bridge.py` 连上浏览器 |
 
 ```bash
 python evaluation/make_testset.py
 python evaluation/run_report.py evaluation/testset
 python evaluation/bench.py "D:\照片文件夹" 10 1 4 8
 python evaluation/hygiene.py                   # 封装守卫，最快，先跑它
-python evaluation/api_test.py http://127.0.0.1:8765
 python evaluation/list_test.py http://127.0.0.1:8765
 python evaluation/zoom_sharpness.py 1 5        # 放大后是否逐像素等于原图
 python evaluation/anim_check.py                # 三种退出动效是否真的在跑
@@ -80,26 +80,19 @@ ReferenceError，而扁平化的冒烟测试反倒可能碰巧跑通）。
 > 并退回首页（`_dev_token()` 只监视这两个目录）。所以**先改完文件，再打开库验收**，
 > 否则会一路看到"动画名是空的"。
 
-## 端到端测试：不靠 bridge，也不靠人手
-
-`web/_e2e.html` 是一个**测试页**（不是应用的一部分）。它：
-
-1. `fetch('/')` 拿到 `index.html`，把 `<body>` **注入自己**（script 标签会被剥掉，
-   因为 `innerHTML` 不执行脚本）—— 这样真实的应用 DOM 就位了
-2. `await import('/home.js')` 手工启动应用
-3. **派发真实的 `KeyboardEvent`**（比如 `i`）
-4. 读 `#overlay` 的 `children` / `querySelectorAll('rect').length`，把结果打印在页面上
-
-然后用无头浏览器截图就行：
+## 端到端测试：在真实浏览器里逐项断言
 
 ```bash
-python evaluation/shot.py        # 但把 URL 换成 http://127.0.0.1:8765/_e2e.html
+python evaluation/ui_e2e.py        # 42 项：界面、键位、多选、多图、弹框
+python evaluation/full_check.py    # 接口 + 数据一致性 + 删除流程
 ```
 
-**为什么值得留**：读代码在这里连续给出了好几次自信的错误答案。
-真正终结争论的，是**在一个真实浏览器里按下真实的键，然后数矩形**。
+`ui_e2e.py` 会造一个 12 张照片的临时库、用 bridge 打开、逐项操作并断言，
+跑完删掉临时库（照片是复制的，原件不动）。它抓的是**只有点一遍才会暴露**的问题：
+按钮忘了解 disabled、提交后高亮不清、多图里单图快捷键还在生效。
 
-它不依赖 Kimi WebBridge、不占用用户的标签页、可以在无人值守下重复跑。
+**为什么值得留**：读代码在这里连续给出了好几次自信的错误答案。
+真正终结争论的，是在一个真实浏览器里按下真实的键，然后数 DOM。
 
 ## bridge 只驱动本机页面
 

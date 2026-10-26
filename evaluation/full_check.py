@@ -170,7 +170,10 @@ def data_consistency(state):
     # 分类计数必须和 issue_summary 对得上
     summary = {row["kind"]: int(row["n"]) for row in (state["issue_summary"] or [])}
     mismatch_kind = None
-    for kind, n in con.execute("SELECT kind, COUNT(*) FROM issues GROUP BY kind"):
+    # 按**照片**计数，不是按 issues 行数：一张照片里两张脸都闭眼会产生两行，
+    # 而界面上的"眼睛闭合 12"说的是 12 张照片。之前用 COUNT(*) 比，两边的口径
+    # 不一样，碰到多人合影就误报。
+    for kind, n in con.execute("SELECT kind, COUNT(DISTINCT photo_id) FROM issues GROUP BY kind"):
         if kind not in summary:
             mismatch_kind = "issue_summary 缺少 {}".format(kind)
             break

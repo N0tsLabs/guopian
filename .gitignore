@@ -7,64 +7,63 @@ venv/
 env/
 .Python
 
-# Build output
+# 构建产物
 build/
 dist/
 release/
 *.spec.bak
 
-# Guopian runtime data
+# 运行时数据
 .cache/
-models/*.task
-# 照片向量模型也按需下载（3.7 MB），不进仓库
-models/*.onnx
 .guopian/
 _guopian_rejected/
 catalogs/
 guopian.portable
 
+# 模型按需下载，不进仓库：人脸检测 3.6 MB，照片向量 3.7 MB
+models/*.task
+models/*.onnx
+
 # 运行日志写在 user_data_dir() 里，不在仓库中。它会记下用户的真实目录路径
 # （D:\image cache\...），而仓库是公开的，所以绝不能提交。
 *.log
 
-# Local evaluation data - your own photos must never be committed
+# 本地评估数据 —— 你自己的照片永远不该进仓库
 evaluation/testset/
 evaluation/mytestset/
 evaluation/labels.csv
 
-# Editors / OS
+# 编辑器 / 系统
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Kimi WebBridge helper runtime state
+# Kimi WebBridge 的运行时状态
 evaluation/.bridge_state.json
 evaluation/.anim_probe.js
 
-# Scratch files the browser probes write and read back
+# 浏览器探针写回读的临时文件
 _cdp.json
 _exit_*.png
 
-# Chromium and matplotlib drop scratch directories in whatever TEMP points at,
-# and in this environment that is inside the working tree -- so one screenshot
-# run leaves a handful of tmpXXXXXX/ behind, each holding a 400 KB font cache.
-# Regenerable, never useful.
-#
-# tmp_split/ is deliberately NOT ignored: it holds the pre-refactor originals of
-# app.js / home.js / index.html, and there is no git history to fall back on yet.
+# Chromium 和 matplotlib 会在 TEMP 里丢临时目录，而这里的 TEMP 就在仓库内，
+# 一次截图会留下几个 tmpXXXXXX/，每个装着 400 KB 字体缓存。可再生，永远没用。
+# tmp_split/ 故意不忽略：它放着重构前的原始文件。
 /tmp*/
 !/tmp_split/
-# the tutorial generates its own throwaway photos here
+
+# 引导用的演示照片，运行时生成
 demo-photos/
 
-# the Chromium profile the app window uses -- it holds cookies and storage,
-# and it is regenerated on demand. Never commit it.
+# 应用窗口用的 Chromium profile：含 cookie 和存储，按需重建，绝不提交
 window-profile/
-# prefs.json holds the paths of the user's own folders
+
+# prefs.json 记录用户自己文件夹的路径
 prefs.json
 prefs.json.bak
 *.bak
-# scratch screenshots from testing
+
+# 调试截图（截图脚本把临时图写到 docs/img/ 下）
 docs/img/_*.png
