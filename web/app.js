@@ -862,6 +862,9 @@ function closeModal() { el.modal.classList.add('hidden'); }
 /* ═════════════════════════ 首次引导 ═════════════════════════ */
 
 function showCoachOnce() {
+  // 截图/自动化用：地址里带 no-coach=1 就不弹这个引导层。
+  // 否则用无痕 profile 截出来的每一张图都被它盖住（README 的截图就吃过这个亏）。
+  if (location.search.indexOf('no-coach') >= 0) return;
   let seen = null;
   try { seen = localStorage.getItem('guopian.coach'); } catch (e) { seen = null; }
   if (seen !== '1' && seen !== 'never') el.coach.classList.remove('hidden');

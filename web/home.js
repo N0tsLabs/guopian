@@ -174,7 +174,7 @@ const Home = (() => {
       const st = statOf(r);
       return `<button class="projCard" data-path="${esc(r.path)}">
         <span class="cardCover">${r.has_catalog
-          ? `<img loading="lazy" alt="" src="${coverURL(r)}">` : ''}</span>
+          ? `<img loading="lazy" alt="" src="${coverURL(r)}" data-root="${esc(r.path)}">` : ''}</span>
         <span class="cardMeta">
           <span class="cardName">${esc(r.name)}</span>
           <span class="cardStat">${esc(st.text)}</span>
@@ -192,7 +192,17 @@ const Home = (() => {
       const r = PROJECTS.find(x => x.path === el.dataset.path);
       el.onclick = (ev) => {
         const hit = ev.target.closest('[data-act]');
-        // The whole card opens the library, so the small actions on the cover
+        // 封面失败重试一次。首页的封面是并发请求的，偶发一张失败就留下碎图标；
+  // 重试带上时间戳，绕开浏览器缓存里的那次失败。
+  document.querySelectorAll('#recentList img[data-root]').forEach((im) => {
+    im.onerror = () => {
+      if (im.dataset.retried) return;
+      im.dataset.retried = '1';
+      const root = im.dataset.root;
+      setTimeout(() => { im.src = `/api/cover?root=${encodeURIComponent(root)}&r=${Date.now()}`; }, 200);
+    };
+  });
+  // The whole card opens the library, so the small actions on the cover
         // have to stop the click rather than sit inside a nested button.
         if (hit) { ev.stopPropagation(); cardAction(hit.dataset.act, r, el); return; }
         openLibrary(r.path);

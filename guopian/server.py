@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import sqlite3
+import threading
+import time
 import subprocess
 import sys
 
-from flask import Flask, jsonify, request, send_file, send_from_directory
+from flask import Flask, Response, jsonify, request, send_file, send_from_directory
 
 from . import config, decisions, imageio, paths, session as session_mod
 from .session import Session
@@ -466,43 +469,53 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
     # ---------------------------------------------------------- images
     @app.get("/api/cover")
     def cover():
-        """A small thumbnail of the first photo in a remembered library.
+        """首页每个项目卡片的那张小封面。
 
-        The home screen shows one cover per project, and at that point NO library
-        is open -- `/img/<id>/small` needs a live Library, so it cannot serve
-        this. Instead the catalog is opened read-only, its first photo is taken,
-        and the ordinary thumbnail cache does the rest: built once, cached on
-        disk next to the catalog, served from there forever after.
+        这个接口出过一次很难查的问题：首页会为所有项目**同时**发请求，而
+        之前的实现要开 sqlite 读一行、再走 ThumbCache 落盘缩略图 —— 并发下
+        偶尔失败，卡片上就是一个碎图标（重试、加锁、换只读连接都试过）。
+        现在只做两件事：列出这个文件夹、把第一张照片缩成 10 KB 的小图，
+        直接返回字节并缓存在内存里。没有数据库、没有落盘、没有共享状态。
 
-        `root` is checked against the remembered list rather than trusted. This
-        is a loopback server, but a query string should never be able to point
-        it at an arbitrary directory and have it decode whatever is there.
+        `root` 仍然要校验：它必须是"最近打开过"或"有我们建的 catalog"的路径，
+        否则这个 loopback 服务就能被指引去解码任意目录。
         """
         root = request.args.get("root", "")
-        if not root or root not in {r["path"] for r in session_mod.recent_libraries()}:
+        if not root or not os.path.isdir(root):
+            return ("", 404)
+        known = {r["path"] for r in session_mod.recent_libraries()}
+        if root not in known and not os.path.exists(
+                os.path.join(paths.catalog_dir(root), "catalog.db")):
             return ("", 404)
 
-        d = paths.catalog_dir(root)
-        db = os.path.join(d, "catalog.db")
-        if not os.path.exists(db):
+        hit = _COVER_CACHE.get(root)
+        if hit is not None:
+            return Response(hit, mimetype="image/jpeg",
+                            headers={"Cache-Control": "max-age=86400"})
+
+        exts = tuple(e.lower() for e in config.SUPPORTED_EXT)
+        try:
+            names = sorted(n for n in os.listdir(root) if n.lower().endswith(exts))
+        except OSError:
+            return ("", 404)
+        if not names:
             return ("", 404)
         try:
-            con = sqlite3.connect("file:{}?mode=ro".format(db.replace("\\", "/")),
-                                  uri=True, timeout=2)
-            row = con.execute(
-                "SELECT path, size, mtime FROM photos WHERE error IS NULL "
-                "ORDER BY taken_ts IS NULL, taken_ts, id LIMIT 1").fetchone()
-            con.close()
-        except Exception:
+            from PIL import Image
+            img = Image.open(os.path.join(root, names[0]))
+            img.draft("RGB", (512, 512))      # JPEG 解码器可以直接降采样
+            img = img.convert("RGB")
+            img.thumbnail((config.THUMB_SMALL, config.THUMB_SMALL),
+                          Image.Resampling.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, "JPEG", quality=82, optimize=True)
+            data = buf.getvalue()
+        except Exception as e:
+            paths.log("cover failed: {}: {}".format(type(e).__name__, e))
             return ("", 404)
-        if not row:
-            return ("", 404)
-        try:
-            p = imageio.ThumbCache(d).get_or_build(
-                row[0], row[1], row[2], config.THUMB_SMALL)
-        except Exception:
-            return ("", 404)
-        return send_file(p, mimetype="image/jpeg", max_age=86400)
+        _COVER_CACHE[root] = data
+        return Response(data, mimetype="image/jpeg",
+                        headers={"Cache-Control": "max-age=86400"})
 
     @app.get("/img/<slug>/<int:pid>/<size>")
     def image(slug, pid, size):
@@ -848,6 +861,10 @@ def _faces_ok() -> dict:
 
     ok, msg = faces_mod.available()
     return {"ok": ok, "message": msg}
+
+
+_COVER_LOCK = threading.Lock()
+_COVER_CACHE: dict[str, bytes] = {}
 
 
 def _writable(folder: str) -> bool:

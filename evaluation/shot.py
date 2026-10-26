@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Take README screenshots without touching the user's browser.
 
 Why this exists: the project's screenshots have to be re-taken whenever the UI
@@ -112,7 +112,7 @@ def shoot(browser: str, url: str, out: str, w: int, h: int) -> bool:
          "--no-first-run", "--no-default-browser-check", "--hide-scrollbars",
          "--user-data-dir=" + prof,
          "--window-size={},{}".format(w, h),
-         "--virtual-time-budget=12000",
+         "--virtual-time-budget=25000",
          "--screenshot=" + out, url],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -165,6 +165,7 @@ def main() -> int:
     wanted = [args.only] if args.only else ["home", "card"]
     ok = 0
 
+    opened = {}
     for which in wanted:
         if which == "card":
             # The card view only renders when a library is open, and the home
@@ -177,7 +178,7 @@ def main() -> int:
                 print("  card  跳过：没有可打开的项目")
                 continue
             try:
-                post(args.base, "/api/open", {"path": folder, "read_only": True})
+                opened = post(args.base, "/api/open", {"path": folder, "read_only": True})
             except Exception as exc:
                 print("  card  打不开库：{}".format(exc))
                 continue
@@ -189,7 +190,13 @@ def main() -> int:
 
         w, h = sizes[which]
         dest = os.path.join(args.out, "{}.png".format(which))
-        if shoot(browser, args.base + "/", dest, w, h):
+        # 卡片视图必须走 /p/<slug>：地址栏说了算以后，光打开库再访问 / 只会停在
+        # 首页 —— 这是"刷新别把我带进项目"那次改动的副作用，这里跟着改。
+        url = args.base + "/"
+        if which == "card" and opened.get("slug"):
+            url = args.base + "/p/" + opened["slug"]
+        # no-coach：别让首次引导层盖住画面
+        if shoot(browser, url + "?no-coach=1", dest, w, h):
             print("  {:<5} -> {}  ({:.0f} KB)".format(
                 which, os.path.relpath(dest, ROOT), os.path.getsize(dest) / 1024))
             ok += 1
@@ -207,3 +214,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

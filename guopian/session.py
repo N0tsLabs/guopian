@@ -37,9 +37,20 @@ def load_prefs() -> dict:
 
 
 def save_prefs(p: dict) -> None:
+    """原子写：先写同目录临时文件再 os.replace 顶上去。
+
+    直接 open("w") 会把文件截断成 0 字节；并发的 load_prefs() 一旦撞上，
+    读到的是半截 JSON、解析失败、返回 {} —— "最近打开"瞬间变空，
+    首页那几个封面请求就会被当成非法路径打回 404。
+    """
     try:
-        with open(_prefs_path(), "w", encoding="utf-8") as f:
+        path = _prefs_path()
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(p, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
     except Exception as e:
         paths.log("could not save prefs: {}".format(e))
 
@@ -380,7 +391,10 @@ def _catalog_stats(photo_root: str) -> dict:
     if not os.path.exists(db):
         return empty
     try:
-        con = sqlite3.connect("file:{}?mode=ro".format(db.replace("\\", "/")), uri=True, timeout=2)
+        # 不用只读 URI：catalog 是 WAL 库，只读连接建不出 -shm，一旦和别的
+        # 读同时发生就抛异常。catalog 是我们自己建的（不是用户的照片），
+        # 用普通连接读几行、带 busy timeout，比只读 URI 稳。
+        con = sqlite3.connect(db, timeout=5.0)
         con.row_factory = sqlite3.Row
         total = con.execute("SELECT COUNT(*) FROM photos").fetchone()[0]
         analyzed = con.execute(
