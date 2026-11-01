@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "guopian"
-version = "0.1.0"
+# 版本号只有一处真源：guopian/__init__.py 的 __version__。写两遍就会漂。
+dynamic = ["version"]
 description = "过片 Guopian - local, offline photo culling. Nothing is uploaded, nothing is deleted."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,24 +25,30 @@ classifiers = [
   "Topic :: Multimedia :: Graphics :: Viewers",
 ]
 dependencies = [
-  "pillow>=10.0",
-  "numpy>=1.24",
-  "opencv-python>=4.8; platform_system != 'Linux'",
-  "opencv-python-headless>=4.8; platform_system == 'Linux'",
-  "flask>=3.0",
-  "mediapipe>=0.10",
-  "pillow-heif>=0.15",
+  "pillow>=10.0,<14",
+  "numpy>=1.24,<3",
+  "opencv-python>=4.8,<6; platform_system != 'Linux'",
+  "opencv-python-headless>=4.8,<6; platform_system == 'Linux'",
+  "flask>=3.0,<4",
+  "mediapipe>=0.10,<2",
+  "pillow-heif>=0.15,<2",
+  # 照片向量（相似分组）的推理后端；缺了它会静默退回 pHash 分组
+  "onnxruntime>=1.16,<2",
 ]
 
 [project.urls]
-Homepage = "https://github.com/N0ts/guopian"
-Issues = "https://github.com/N0ts/guopian/issues"
+Homepage = "https://github.com/N0tsLabs/guopian"
+Issues = "https://github.com/N0tsLabs/guopian/issues"
 
-[project.scripts]
-guopian = "run:main"
+# 没有 [project.scripts]：这个项目不是按 pip 包安装使用的。web/、models/ 都按
+# 源码目录解析（config.ROOT_DIR），装进 site-packages 会找不到它们。
+# 入口就是 `python run.py`，打包走 guopian.spec / scripts/build.py。
 
 [tool.setuptools]
 packages = ["guopian"]
+
+[tool.setuptools.dynamic]
+version = { attr = "guopian.__version__" }
 
 [tool.ruff]
 line-length = 100

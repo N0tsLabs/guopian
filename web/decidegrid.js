@@ -270,7 +270,7 @@ const DecideGrid = (() => {
     const msg = picks.length
       ? `留下 ${picks.length} 张${marked.length ? `（精选 ${marked.length}）` : ''}，${rest.length} 张不过`
       : `${ids.length} 张全部不过`;
-    G.lastBatch = batch;      // app.js 的 ⌫ 用它整批撤回
+    S.lastBatch = batch;      // app.js 的 ⌫ 用它整批撤回
     window.__lastBatch = batch;   // 浏览器测试用的
     const jumpTo = (kept[0] || marked[0] || ids[0]);
     if (onDone) { const f = onDone; onDone = null; f('commit', jumpTo); }

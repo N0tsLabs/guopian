@@ -178,7 +178,7 @@ class Library:
     # -------------------------------------------------------------- stage 1
 
     def analyze_pending(self, limit: int | None = None) -> int:
-        self.store.conn  # ensure schema
+        _ = self.store.conn            # touch it once so the schema exists
         pending = self.store.needs_analysis(config.ANALYSIS_VERSION)
         if limit:
             pending = pending[:limit]
@@ -348,8 +348,8 @@ class Library:
 
     def _live_recount(self):
         out: dict[str, int] = {}
-        for merged, faces in self._live_items:
-            self._live_count_into(merged, faces, self._live_calib, out)
+        for merged, fcs in self._live_items:
+            self._live_count_into(merged, fcs, self._live_calib, out)
         with self.progress.lock:
             self.progress.buckets = out
 
@@ -384,9 +384,25 @@ class Library:
         if len(casts) >= 12:
             rr = [c[0] for c in casts]
             bb = [c[1] for c in casts]
+            r_med = metrics.percentile(rr, 50.0)
+            b_med = metrics.percentile(bb, 50.0)
+            # 稳健尺度（中位绝对偏差 × 1.4826 ≈ σ），只在**中间那一段**上量：
+            # 极端值本身就是这条规则要判的对象，把它们算进"本批的正常波动"里，
+            # 门槛会被抬到自己都过不去（实测：把两张故意偏色的算进去，σ 从
+            # 0.06 涨到 0.23，于是真偏色那两张反而判不出来）。
+            def _sigma(vals, med):
+                lo = metrics.percentile(vals, config.CAST_PCT * 2.5)
+                hi = metrics.percentile(vals, 100.0 - config.CAST_PCT * 2.5)
+                body = [x for x in vals if lo <= x <= hi]
+                return 1.4826 * metrics.percentile([abs(x - med) for x in (body or vals)], 50.0)
+
+            r_sig = _sigma(rr, r_med)
+            b_sig = _sigma(bb, b_med)
             cast_ctx = {
-                "r_med": metrics.percentile(rr, 50.0),
-                "b_med": metrics.percentile(bb, 50.0),
+                "r_med": r_med,
+                "b_med": b_med,
+                "r_sigma": r_sig,
+                "b_sigma": b_sig,
                 "r_lo": metrics.percentile(rr, config.CAST_PCT),
                 "r_hi": metrics.percentile(rr, 100.0 - config.CAST_PCT),
                 "b_lo": metrics.percentile(bb, config.CAST_PCT),
@@ -509,7 +525,13 @@ class Library:
 
     def start(self) -> bool:
         if self._thread and self._thread.is_alive():
-            return False
+            # 上一趟可能刚刚被取消、正在收尾（当前这张照片还要跑完）。
+            # 以前这里直接返回 False，于是"取消 → 回首页 → 再打开这个库"
+            # 会接回一个已取消的库：不分析、也不弹进度，看起来像坏了。
+            # 等它收尾（实测十几张的库 < 2 秒）；真还在跑才当作"已经在分析了"。
+            self._thread.join(timeout=10.0)
+            if self._thread.is_alive():
+                return False
         self._cancel.clear()
         self.progress.begin()      # 先清进度再起线程，避免看到上一趟的 done
         self._thread = threading.Thread(target=self.run_full, daemon=True)

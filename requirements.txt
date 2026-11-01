@@ -2,10 +2,18 @@
 #
 # OpenCV and NumPy do the classic CV work; MediaPipe adds faces, eyes,
 # expression and gaze in a single Apache-2.0 model.
-pillow>=10.0
-numpy>=1.24
-opencv-python-headless>=4.8 ; platform_system == "Linux"
-opencv-python>=4.8 ; platform_system != "Linux"
-flask>=3.0
-mediapipe>=0.10
-pillow-heif>=0.15
+# 上界不是洁癖：阈值是在特定版本的指标实现上调出来的，而 opencv / mediapipe
+# 跨大版本时，Laplacian、DCT、人脸模型的行为都可能变一点点 —— 那一点点会直接
+# 变成"以前不报的问题现在报了"。大版本升级应该是一次有意的改动，而不是 pip 的
+# 默认结果。
+pillow>=10.0,<14
+numpy>=1.24,<3
+opencv-python-headless>=4.8,<6 ; platform_system == "Linux"
+opencv-python>=4.8,<6 ; platform_system != "Linux"
+flask>=3.0,<4
+mediapipe>=0.10,<2
+pillow-heif>=0.15,<2
+# 照片向量（相似分组）用的推理后端。以前漏了它：模型会正常下载，但
+# embed.available() 找不到 onnxruntime，于是相似分组静默退回 pHash ——
+# 装完依赖看起来一切正常，实际上准确度差了一大截。
+onnxruntime>=1.16,<2

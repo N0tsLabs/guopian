@@ -40,10 +40,19 @@ def _modal(kind: str, title: str, message: str) -> None:
         root.destroy()
 
 
-def fatal(title: str, message: str) -> None:
-    """Show an error and log it. Falls back to stderr when tk is unavailable."""
+def fatal(title: str, message: str, dialog: bool = True) -> None:
+    """Show an error and log it. Falls back to stderr when tk is unavailable.
+
+    `dialog=False` is for the command-line paths (`--report`, `--selftest`).
+    Those are run from a script or a terminal, where a modal message box is
+    wrong twice over: it says nothing the stderr line does not already say, and
+    it blocks the process until somebody clicks it. A bad folder argument to
+    `--selftest` therefore hung forever with no output at all.
+    """
     paths.log("FATAL {}: {}".format(title, message))
     print("{}: {}".format(title, message), file=sys.stderr or sys.stdout)
+    if not dialog:
+        return
     try:
         _modal("showerror", title, message)
     except Exception:

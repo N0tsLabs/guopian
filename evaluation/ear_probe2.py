@@ -19,7 +19,7 @@ import sys
 
 import numpy as np
 
-ROOT = r"E:\ai project\guopian"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 

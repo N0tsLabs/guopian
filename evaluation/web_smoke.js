@@ -166,6 +166,12 @@ const HOME = {
 
 const STATE = {
   root: 'D:\photos\shoot', work_dir: 'C:\\cat',
+  // The real /api/state always carries the library slug, and imgUrl() refuses to
+  // build a URL without it (that is the guard against serving the previous
+  // project's cached photo). The fixture predates that field, so every render
+  // here used to throw "imgUrl 调用时还不知道是哪个库" -- a test-data gap that
+  // reads like a product bug.
+  slug: 'shoot-1a2b3c4d5e',
   read_only: true, generation: 1,
   progress: { phase: 'done', total: 93, done: 93, rate: 17, elapsed: 5.4, running: false },
   counts: { total: 93, analyzed: 93,
@@ -338,6 +344,13 @@ const RE_IMPORT = /import\s+(?:([\w$]+)\s*,\s*)?(?:\{([^}]*)\}|\*\s+as\s+([\w$]+
 const RE_EXPORT = /export\s*\{([^}]*)\};?/g;
 const RE_EXPORT_DECL = new RegExp(
   'export\\s+(?:async\\s+)?(?:const|let|var|function|class)\\s+([A-Za-z_$][\\w$]*)', 'g');
+/* 声明式的 export 还要在**执行**前去掉关键字本身。
+ *
+ * RE_EXPORT_DECL 只用来收集名字；body 里那句 `export function getMode()` 原样
+ * 留着，vm 就会抛 "Unexpected token 'export'" —— 而这条错误是整份冒烟测试里
+ * 唯一一条"加载器自己写错了"的，看着像被测代码坏了。之前的模块全都用
+ * `export { ... }` 结尾，所以一直没暴露，直到 mode.js 用了 `export function`。 */
+const RE_EXPORT_KW = /\bexport\s+(?=(?:async\s+)?(?:const|let|var|function|class)\s)/g;
 
 /* 注释必须先清掉，而且要在清掉之后的文本上找 import。
  *
@@ -459,7 +472,7 @@ function load(file) {
   while ((m = RE_EXPORT_DECL.exec(src)) !== null) {
     if (!exported.some(x => x.pub === m[1])) exported.push({ pub: m[1], local: m[1] });
   }
-  const body = blankMatch(blankMatch(src, RE_IMPORT), RE_EXPORT);
+  const body = blankMatch(blankMatch(blankMatch(src, RE_IMPORT), RE_EXPORT), RE_EXPORT_KW);
 
   // 递归：被 import 的先求值完 —— 和浏览器里 ES module 的规则一致。
   const prelude = [];

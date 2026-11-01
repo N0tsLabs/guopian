@@ -30,7 +30,12 @@ class _DSU:
 
 
 def _rank_normalise(values: list[float | None]) -> list[float | None]:
-    """Map values to 0..1 by rank."""
+    """Map values to 0..1 by rank, with ties kept tied.
+
+    Equal values must get equal ranks. Two identical frames in one burst used to
+    be split by their position in the list, so a duplicate pair came out as
+    "1st" and "2nd" -- and 组内最佳 is derived from that rank.
+    """
     idx = [i for i, v in enumerate(values) if v is not None]
     n = len(idx)
     out: list[float | None] = [None] * len(values)
@@ -40,8 +45,15 @@ def _rank_normalise(values: list[float | None]) -> list[float | None]:
         out[idx[0]] = 0.5
         return out
     order = sorted(idx, key=lambda i: values[i])
-    for pos, i in enumerate(order):
-        out[i] = pos / float(n - 1)
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and values[order[j + 1]] == values[order[i]]:
+            j += 1
+        share = ((i + j) / 2.0) / float(n - 1)
+        for k in range(i, j + 1):
+            out[order[k]] = share
+        i = j + 1
     return out
 
 
@@ -287,10 +299,14 @@ def _weighted(comp: dict[str, float]) -> float:
 def rank_groups(rows: list[dict], face_index: dict[int, list[dict]],
                 groups: list[dict]) -> None:
     """Fill in per-photo scores, in-group ranks and the group's best shot."""
-    by_id = {r["id"]: r for r in rows}
     for g in groups:
         members = g["members"]
-        comps = [score_components(by_id.get(m, {}), face_index.get(m, [])) for m in members]
+        # `members` are INDICES into `rows` (that is what build_groups and
+        # save_pass2 use), not photo ids. Looking them up in `by_id` therefore
+        # scored whichever photo happened to have that id -- right only when the
+        # id order and the capture order agreed, which is not the usual case.
+        comps = [score_components(rows[m], face_index.get(rows[m]["id"], []))
+                 for m in members]
 
         # Inside one burst the absolute sharpness number is meaningless on its
         # own -- what matters is which frame is sharpest. Replace it with the

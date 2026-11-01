@@ -15,11 +15,12 @@ import json
 import os
 import sqlite3
 import sys
+import time
 import urllib.error
 import urllib.request
 
 BASE = "http://127.0.0.1:8765"
-ROOT = r"E:\ai project\guopian"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 FAILS: list[str] = []
@@ -77,6 +78,25 @@ def api_surface():
     if st != 200:
         bad("/api/state 打不开（{}）—— 后面全部跳过".format(st))
         return None
+
+    # 等库 settle 再断言。
+    #
+    # 打开一个没分析过的文件夹时，/api/open 立刻返回，分析在后台线程里跑。
+    # 不等的话，紧跟着的断言会读到"照片没有尺寸 / calibration 为空 /
+    # photo_vec 0/N"，看起来像功能坏了，其实只是还没跑完 —— 实测这么红过。
+    if s.get("boot_needed") or s.get("progress", {}).get("running"):
+        print("  等分析跑完…")
+        deadline = time.time() + 300
+        while time.time() < deadline:
+            time.sleep(1.0)
+            st2, s = req("/api/state")
+            if st2 != 200:
+                break
+            if not s.get("progress", {}).get("running") and not s.get("boot_needed"):
+                break
+        time.sleep(1.0)
+        st, s = req("/api/state")
+
     for key in ("root", "slug", "counts", "progress", "boot", "boot_needed",
                 "catalog_key", "embed", "labels", "issue_summary", "calibration"):
         check(key in s, "/api/state 有 {}".format(key))

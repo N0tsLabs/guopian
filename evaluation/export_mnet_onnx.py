@@ -14,7 +14,7 @@ import sys
 import numpy as np
 import torch
 
-ROOT = r"E:\ai project\guopian"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "models", "photo_embed.onnx")
 os.environ.setdefault("TORCH_HOME", os.path.join(ROOT, ".cache", "torch"))
 

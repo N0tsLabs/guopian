@@ -26,7 +26,7 @@ sys.path.insert(0, ROOT)
 
 from guopian import config, faces as faces_mod  # noqa: E402
 
-FOLDER = r"D:\photos\shoot"
+FOLDER = os.environ.get("GUOPIAN_PHOTO_DIR", "")
 
 
 def main() -> int:
@@ -34,8 +34,25 @@ def main() -> int:
     from PIL import Image
     from guopian.imageio import open_image
 
-    names = sys.argv[1:] or ["DSC09891.JPG", "DSC09892.JPG", "DSC09893.JPG",
-                             "DSC09869.JPG", "DSC09856.JPG"]
+    global FOLDER
+    args, names = [], []
+    argv = sys.argv[1:]
+    while argv:
+        a = argv.pop(0)
+        if a == "--folder" and argv:
+            FOLDER = argv.pop(0)
+        elif a.startswith("--folder="):
+            FOLDER = a.split("=", 1)[1]
+        else:
+            names.append(a)
+    if not FOLDER or not os.path.isdir(FOLDER):
+        print("用法: python evaluation/face_crop.py --folder <照片文件夹> [文件名…]")
+        print("     （也可以设环境变量 GUOPIAN_PHOTO_DIR）")
+        print("     现在给的是:", FOLDER or "(空)")
+        return 2
+
+    names = names or ["DSC09891.JPG", "DSC09892.JPG", "DSC09893.JPG",
+                      "DSC09869.JPG", "DSC09856.JPG"]
     lm = faces_mod._create_landmarker()
 
     def count(im):

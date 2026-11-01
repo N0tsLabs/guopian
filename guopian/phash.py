@@ -44,10 +44,6 @@ def _hash_array(a: np.ndarray) -> bytes:
     return np.packbits(bits.reshape(-1)).tobytes()
 
 
-def phash_hex(img: Image.Image) -> str:
-    return phash_bytes(img).hex()
-
-
 _POPCOUNT = np.array([bin(i).count("1") for i in range(256)], dtype=np.uint8)
 
 

@@ -82,33 +82,6 @@ def _lap_var_best(gray: np.ndarray, blocks: int = 6) -> float:
     return float(vals[min(len(vals) - 1, int(len(vals) * 0.9))])
 
 
-def _noise_flat(gray: np.ndarray, blocks: int = 16) -> float:
-    """噪声只在**平坦区域**里量。
-
-    Donoho-Johnstone 那个基于全图水平差分的估计，会把布料纹理、亮片、头发
-    丝也当成噪声 —— 实测 ISO 100 的粉色背心被读到"噪点偏高 65%"，因为它
-    满身是细纹理。而真实传感器噪声的特点是"到处都有"，纹理只在某些块里有。
-    所以按块算差分 MAD，取最低的那一档（10 分位）当噪声底。
-    """
-    if gray.size < 4096:
-        return 0.0
-    h, w = gray.shape
-    th, tw = max(16, h // blocks), max(16, w // blocks)
-    vals: list[float] = []
-    for y in range(0, max(1, h - th + 1), th):
-        for x in range(0, max(1, w - tw + 1), tw):
-            tile = gray[y:y + th, x:x + tw].astype(np.float32)
-            if tile.size < 256:
-                continue
-            d = np.diff(tile, axis=1)
-            mad = np.median(np.abs(d - np.median(d)))
-            vals.append(1.4826 * mad / math.sqrt(2.0))
-    if not vals:
-        return _noise_sigma(gray)
-    vals.sort()
-    return float(vals[max(0, int(len(vals) * 0.1) - 1)])
-
-
 def _noise_sigma(gray: np.ndarray) -> float:
     """Robust noise estimate from horizontal first differences (Donoho-Johnstone style)."""
     if gray.size < 4096:
@@ -170,9 +143,15 @@ def _blockiness(gray: np.ndarray) -> float:
     hi = np.delete(dh, np.s_[7::8], axis=1).mean() if dh.shape[1] > 9 else 0.0
     vb = dv[7::8, :].mean() if dv.shape[0] > 8 else 0.0
     vi = np.delete(dv, np.s_[7::8], axis=0).mean() if dv.shape[0] > 9 else 0.0
-    interior = (hi + vi) / 2.0 + 1e-6
+    interior = (hi + vi) / 2.0
+    # 分母是"画面内部的相邻像素差"。它接近 0 的时候（大面积欠曝、大雾、纯色
+    # 背景、虚焦），这个比值量的其实是 JPEG 的量化噪声，不是压缩痕迹：实测
+    # 一张几乎全黑的照片能到 8，一张干净的渐变到 2 —— 而它们看上去都不脏。
+    # 所以先问"有没有东西可量"，没有就不下结论，和别处的 gating 一样。
+    if interior < 1.0:
+        return 1.0
     boundary = (hb + vb) / 2.0
-    return float(boundary / interior)
+    return float(boundary / (interior + 1e-6))
 
 
 # ------------------------------------------------------------------ public

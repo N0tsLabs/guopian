@@ -15,6 +15,7 @@
  */
 
 import { G } from './core.js';
+import { S } from './state.js';
 import { Tour } from './tour.js';
 
 const Settings = (() => {
@@ -59,7 +60,7 @@ const Settings = (() => {
     ['高级', [
       { k: 'workers', t: 'number', label: '分析进程数', unit: '（0 = 自动）' },
       { k: '__tour', t: 'action', label: '新手教程', action: 'tour',
-        hint: '再走一遍：从认界面到归档，用一批演示照片。' },
+        hint: '再走一遍：从认界面到归档。手上没有打开项目时，会用一批临时照片演示。' },
     ]],
   ];
 
@@ -120,7 +121,12 @@ const Settings = (() => {
     body.querySelectorAll('button[data-t="action"]').forEach(el => {
       el.onclick = () => {
         const act = el.dataset.action;
-        if (act === 'tour') { close(); Tour.open({ withDemo: true }); }
+        if (act !== 'tour') return;
+        close();
+        // 项目开着就讲项目那几屏；没开着就走完整教程（含演示库）—— 只讲首页
+        // 那几步是讲不明白「一张一张过」到底什么样的。
+        if (S.state && S.state.root) Tour.open({ hasLibrary: true });
+        else Tour.start();
       };
     });
     body.querySelectorAll('input.setNum').forEach(el => {

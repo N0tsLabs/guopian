@@ -13,14 +13,13 @@ from __future__ import annotations
 import os
 import shutil
 import sys
-import tempfile
 
 import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from guopian import config, decisions, paths  # noqa: E402
+from guopian import decisions  # noqa: E402
 from guopian.session import Session  # noqa: E402
 
 

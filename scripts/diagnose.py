@@ -13,13 +13,16 @@ restriction, which is why cmd and robocopy fail too when Python starts them.
 """
 from __future__ import annotations
 
+import argparse
 import ctypes
 import getpass
 import re
 import os
 import sys
 
-PHOTO_DIR = r"D:\photos\shoot"
+# 默认值只是示例：真正要检查的目录用 --dir 给，或者设 GUOPIAN_PHOTO_DIR。
+# 写死一个人的照片目录会让这个脚本在别人机器上永远报"文件夹不存在"。
+DEFAULT_PHOTO_DIR = os.environ.get("GUOPIAN_PHOTO_DIR", os.path.join(os.path.expanduser("~"), "Pictures"))
 CONTROL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                        ".cache")
 
@@ -85,6 +88,12 @@ def attempt(label, fn):
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description="这台机器能不能往照片文件夹里写？")
+    ap.add_argument("--dir", default=DEFAULT_PHOTO_DIR,
+                    help="要检查的照片文件夹（默认 %(default)s）")
+    args = ap.parse_args()
+    photo_dir = os.path.abspath(os.path.expanduser(args.dir))
+
     print()
     print("  " + "=" * 62)
     print("  Can THIS machine write to the photo folder?")
@@ -94,13 +103,14 @@ def main() -> int:
     print("  python     : {}".format(sys.executable))
     print("  integrity  : {}".format(integrity()))
     print("  elevated   : {}".format(_admin()))
-    print("  photo dir  : exists={}".format(os.path.isdir(PHOTO_DIR)))
+    print("  photo dir  : {}".format(photo_dir))
+    print("  exists     : {}".format(os.path.isdir(photo_dir)))
     print()
     print("  started by : {}".format(parent_chain()))
     print()
 
     def mkdir_photo():
-        p = os.path.join(PHOTO_DIR, "_gtest")
+        p = os.path.join(photo_dir, "_gtest")
         os.makedirs(p, exist_ok=True)
         os.rmdir(p)
 
@@ -116,6 +126,9 @@ def main() -> int:
     if photo_ok:
         print("  VERDICT: writing works here. If the app still fails, it is")
         print("           running as a different process than this one.")
+    elif not os.path.isdir(photo_dir):
+        print("  VERDICT: that folder does not exist. Pass --dir with a real one")
+        print("           (or set GUOPIAN_PHOTO_DIR).")
     elif ctrl_ok:
         print("  VERDICT: this process can write to the workspace but not to the")
         print("           photo folder. Look at integrity above: if it says Low,")

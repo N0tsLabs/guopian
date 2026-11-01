@@ -15,7 +15,6 @@ from __future__ import annotations
 import os
 import queue
 import threading
-from typing import Any
 
 import numpy as np
 from PIL import Image
@@ -196,8 +195,10 @@ def _catchlight(gray: np.ndarray, box, ref: float, gw: int, gh: int):
     None when the eye is too small for the number to mean anything.
     """
     x, y, w, h = box
-    x0 = int(max(0, x * gw)); y0 = int(max(0, y * gh))
-    x1 = int(min(gw, (x + w) * gw)); y1 = int(min(gh, (y + h) * gh))
+    x0 = int(max(0, x * gw))
+    y0 = int(max(0, y * gh))
+    x1 = int(min(gw, (x + w) * gw))
+    y1 = int(min(gh, (y + h) * gh))
     if x1 - x0 < 3 or y1 - y0 < 2:
         return None
     roi = gray[y0:y1, x0:x1]
@@ -310,7 +311,6 @@ def analyze_faces(img: Image.Image, gray_norm: np.ndarray,
     import mediapipe as mp
 
     rgb = np.asarray(img.convert("RGB"), dtype=np.uint8)
-    mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
     lm = _acquire_lm()
     try:

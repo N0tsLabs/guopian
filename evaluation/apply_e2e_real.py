@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import sqlite3
 import subprocess
 import sys
@@ -20,7 +19,9 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-SRC = r"D:\photos\shoot"
+# 被测照片目录用 --src 或 GUOPIAN_PHOTO_DIR 给 —— 写死某个人的照片目录，在别人
+# 机器上只会得到一句"文件夹不存在"。
+SRC = os.environ.get("GUOPIAN_PHOTO_DIR", "")
 MIRROR = os.path.join(ROOT, ".cache", "realtest", "100MSDCF")
 API = "http://127.0.0.1:8765"
 
@@ -81,13 +82,22 @@ def wait_for_library(path, tries=400):
 
 
 def catalog_for(lib_path):
-    import glob
     from guopian import paths
     return os.path.join(paths.catalog_dir(lib_path), "catalog.db")
 
 
 def main() -> int:
-    global MIRROR_PATH
+    global MIRROR_PATH, SRC
+    import argparse
+    ap = argparse.ArgumentParser(description="在真实照片上跑一遍三文件夹归档")
+    ap.add_argument("--src", default=SRC, help="原始照片目录（也可以用 GUOPIAN_PHOTO_DIR）")
+    args = ap.parse_args()
+    SRC = os.path.abspath(os.path.expanduser(args.src or ""))
+    if not os.path.isdir(SRC):
+        print("不是有效的照片目录:", SRC or "(空)")
+        print("用法: python evaluation/apply_e2e_real.py --src <照片目录>")
+        return 2
+
     MIRROR_PATH = MIRROR
     print("\n  1. 把 93 张真实照片镜像到工作区（robocopy，它能写 E:）")
     os.makedirs(os.path.dirname(MIRROR), exist_ok=True)

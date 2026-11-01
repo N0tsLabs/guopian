@@ -49,11 +49,6 @@ def pending(store: Store) -> list[dict]:
     return out
 
 
-# Kept because the API and the tests still ask for it by name.
-def pending_rejects(store: Store) -> list[dict]:
-    return [d for d in pending(store) if d["decision"] == "reject"]
-
-
 def preview(store: Store, mode: str = MODE_QUARANTINE) -> dict:
     items = pending(store)
     root = _library_root(store)

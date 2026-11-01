@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("MPLCONFIGDIR", os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache", "matplotlib"))
 
-from guopian import config, faces, pipeline  # noqa: E402
+from guopian import faces, pipeline  # noqa: E402
 
 
 def main() -> int:

@@ -31,6 +31,8 @@ python run.py "D:\你的照片文件夹" --read-only
 | `zoom_sharpness.py` | 比对放大后的画面与磁盘原文件的逐像素差（MAD + 对齐搜索） |
 | `full_check.py` | **全量自检**：37 个接口 + 数据一致性 + 删除流程。跑完给出通过/失败清单 |
 | `ui_e2e.py` | **浏览器端到端**：真实浏览器里逐项操作与断言（选文件夹、分析、导航、决定、多选、多图、弹框）。需要 `bridge.py` 连上浏览器 |
+| `cdp_e2e.mjs` | **浏览器端到端（不需要扩展）**：用 CDP 连一个带独立 profile 的 Edge/Chrome，67 项覆盖首页/浏览器/分析/键位/筛选/多选/归档/回滚/设置/教程/删项目。自己建测试库，跑完删掉 |
+| `score.py` | **准确率打分**：拿 `labels.csv` 的人工标注，算每个问题类型的 TP/FP/FN、精确率、召回率，以及判定一致率；`--json` 存基线、`--compare` 看改动是变好还是变坏 |
 
 ```bash
 python evaluation/make_testset.py
@@ -85,7 +87,17 @@ ReferenceError，而扁平化的冒烟测试反倒可能碰巧跑通）。
 ```bash
 python evaluation/ui_e2e.py        # 42 项：界面、键位、多选、多图、弹框
 python evaluation/full_check.py    # 接口 + 数据一致性 + 删除流程
+
+# 不想装 Kimi WebBridge 时用这个：自己连一个 CDP 浏览器，67 项
+msedge --user-data-dir=%TEMP%\guopian-e2e-profile --remote-debugging-port=9224 ^
+       --window-size=1440,900 http://127.0.0.1:8765/
+node evaluation/cdp_e2e.mjs 9224
 ```
+
+`cdp_e2e.mjs` 从 `guopian/assets/demo` 复制出一个 12 张的临时库当被测对象，
+所以它**不会碰你自己的照片**，跑完把库删掉；截图落在 `.cache/e2e/`。
+它连的是独立 profile 的浏览器，不会动你正在用的那个 —— 这也是它和 `ui_e2e.py`
+最大的区别（后者借的是你当前的活动标签页，所以只能在还没切走的时候用）。
 
 `ui_e2e.py` 会造一个 12 张照片的临时库、用 bridge 打开、逐项操作并断言，
 跑完删掉临时库（照片是复制的，原件不动）。它抓的是**只有点一遍才会暴露**的问题：
@@ -138,11 +150,15 @@ python evaluation/bridge.py close         # 用完关掉自己开的标签页
 所以真正需要你做的是：
 
 1. 拿**你自己的** 500–2000 张照片跑一遍 `run_report.py`
-2. 对着输出，人工数一下：
-   - 被判"闭眼"的里，真正闭眼的有几张？（假阳性率）
-   - 被判"模糊"的里，真正糊的有几张？
-   - 该被判出来但漏掉的有几张？（假阴性率）
-3. 把结果发到 Issue
+2. 对着输出，人工标一遍（`labels.csv`，格式见下）
+3. `python evaluation/score.py "D:\照片" --labels labels.csv` 得到每个问题的
+   精确率 / 召回率
+4. 把结果发到 Issue
+
+`score.py` 只统计 `labels.csv` 里出现过的照片，没标的不算误报 —— 所以标注集
+要么覆盖整库，要么是随机抽样，挑着标会让数字失真。它不替你判断，只负责把
+"我感觉好了点"变成"偏色误报从 3 张降到 0 张，召回没掉"。
+调阈值前后各存一份 `--json`，`--compare` 就能看出哪一类被改坏了。
 
 **这些数字决定每个功能的阈值该定在哪，也决定哪些功能值得留。**
 如果闭眼检测的假阳性超过 10%，它就应该从"自动移除"降级成"提示"。

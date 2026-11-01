@@ -46,6 +46,11 @@
           </svg>
           <span>打开新文件夹</span>
         </button>
+        <!-- 只是看看怎么用：造一批临时照片、走一遍教程，退出时删掉，
+             不写进「最近打开」。没有它，第一次打开就必须先拿自己的照片冒险。 -->
+        <button class="btn ghost block" id="btnDemo" title="用一批临时照片走一遍，结束后自动删除">
+          <span>先看看它怎么用</span>
+        </button>
         <div class="ctaHint" id="faceHint"></div>
 
         <div class="railFoot">
@@ -115,6 +120,7 @@
 
     <div class="topRight">
       <span class="roBadge hidden" id="roBadge" title="以只读方式打开：筛选照常，但永远不会移动文件">只读</span>
+      <span class="roBadge hidden" id="demoBadge" title="演示库：结束教程就删除，不会留在「最近打开」里">演示</span>
       <button class="iconbtn" id="btnGrid" title="网格视图 (G)">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9">
           <rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/>

@@ -33,6 +33,12 @@ const S = {
   selAnchor: null,
   shiftAnchor: null,
   busy: false, poll: null, generation: -1,
+  // 多图提交留下的 batch id：那一批用的是同一个 batch，所以 ⌫ 要整批撤回。
+  // 只撤最后一张会让库停在一个用户从来没选过的状态（decidegrid 里写，app.js 用）。
+  lastBatch: null,
+  // 教程在跑的时候不弹「三件事，两个方向」那个引导层：一层讲一遍就够了，
+  // 两个浮层同时压在同一屏上，谁也看不清。教程关掉就恢复。
+  suppressCoach: false,
 };
 
 const V = {

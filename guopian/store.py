@@ -7,7 +7,7 @@ import os
 import sqlite3
 import threading
 import time
-from typing import Any, Iterable
+from collections.abc import Iterable
 
 import numpy as np
 

@@ -54,7 +54,11 @@ TRASH_DIR_NAME = "_guopian_rejected"
 # 10: 加了 MAR 上限（>0.22 说明那张「脸」本身就检错了）。
 # 9: looking_away 默认不再上报（eyeLook* 实测会指错方向），睁眼/张嘴改用
 #    EAR / MAR。这两件事都改变了输出，所以要重算。
-ANALYSIS_VERSION = 12
+# 13: 块效应（compressed）加了一条"没有纹理就不判"的门。分母（画面内部的
+#     相邻像素差）接近 0 时那个比值只是量化噪声：一张几乎全黑的照片能到 8，
+#     一张干净的渐变到 2，看上去都不脏。blockiness 是存进库里的原始量，
+#     所以要重算。
+ANALYSIS_VERSION = 13
 
 # 首屏"边分析边分类"图表：每收满这么多张重算一次阈值。
 # 阈值（soft / noisy）是按整批照片的分布算出来的，分析开始时没有分布可用，
@@ -223,6 +227,14 @@ CATCHLIGHT_MIN = 0.04
 # flagged. CAST_* are ratios against green, so 1.0 is neutral.
 CAST_MEDIAN_TOL = 0.055   # minimum absolute deviation from the session median
 CAST_PCT = 4.0            # ...and it must be in the extreme N% of the session
+# ...and it must stand out from the shoot's OWN spread, not just beat a fixed
+# number. The 4%/96% percentile is worthless on a 12-photo library -- it *is*
+# the second-largest / second-smallest value, so the most extreme photo is
+# always "extreme". Measured on a 12-photo set: the自然 spread between ordinary
+# scenes was MAD 0.10 (robust sigma 0.15), i.e. wider than the 0.055 tolerance
+# the rule was using, and the plainest photo in the set was flagged 偏冷
+# (deviation 0.31). This multiplier is applied to that robust sigma.
+CAST_SIGMA_K = 3.0
 
 # ---------------------------------------------------------------- grouping
 

@@ -15,7 +15,7 @@ import string
 import threading
 import time
 
-from . import config, paths
+from . import config, demo, paths
 from .pipeline import Library
 
 PREFS = "prefs.json"
@@ -104,18 +104,6 @@ def set_alias(path: str, alias: str) -> bool:
 
 
 # ------------------------------------------------------------------ settings
-
-def session_from_settings(**kw) -> "Session":
-    """A Session whose defaults come from the settings the user saved.
-
-    read_only and workers are constructor defaults, so they have to be read
-    before the Session exists rather than applied to it afterwards.
-    """
-    s = get_settings()
-    ro = bool(s.get("read_only"))
-    w = int(s.get("workers") or 0) or None
-    return Session(read_only=ro, workers=w, **kw)
-
 
 def get_settings() -> dict:
     """Current settings, defaults filled in for anything unset.
@@ -650,7 +638,15 @@ class Session:
             return self.lib.root if self.lib else None
 
     def open(self, folder: str, work_dir: str | None = None,
-             read_only: bool | None = None, scan: bool = True) -> Library:
+             read_only: bool | None = None, scan: bool = True,
+             remember_lib: bool = True, is_demo: bool = False) -> Library:
+        """Open `folder` as the current library.
+
+        `remember_lib=False` is for the tutorial's throwaway library: it must not
+        end up in "recent", because the whole point of a demo is that nothing is
+        left behind afterwards. `is_demo=True` additionally makes close() delete
+        the folder instead of detaching it to keep scanning.
+        """
         folder = os.path.abspath(os.path.expanduser(folder))
         if not os.path.isdir(folder):
             raise NotADirectoryError(folder)
@@ -661,25 +657,74 @@ class Session:
             prev = _DETACHED.pop(wd, None)
             if prev is not None and getattr(prev, "root", None) == folder:
                 if self.lib is not None and self.lib is not prev:
-                    self.lib.cancel()
+                    self._release(self.lib)
                 self.lib = prev
                 self.generation += 1
-                remember(folder)
+                if remember_lib:
+                    remember(folder)
+                # 接回来的是一个"上次没跑完"的库时要把那一趟重新起来。
+                # 之前只看是不是还活着：如果上一趟已经被取消（用户在进度屏
+                # 点了取消）或者出错，接回来的就是"有照片、没分析"的库 ——
+                # 界面上不弹进度、也不分析，看起来像坏了。
+                if scan and self._needs_scan(prev):
+                    prev.start()
                 return prev
             if self.lib is not None:
-                self.lib.cancel()
+                self._release(self.lib)
             ro = self.read_only if read_only is None else read_only
             lib = Library(folder, workers=self.workers, work_dir=wd, read_only=ro)
+            lib.is_demo = bool(is_demo)
             self.lib = lib
             self.generation += 1
-            remember(folder)
+            if remember_lib:
+                remember(folder)
             if scan:
                 lib.start()
             return lib
 
+    @staticmethod
+    def _needs_scan(lib) -> bool:
+        """这一趟真的在跑吗；没在跑（取消/出错/还没开始）就该重起一趟。"""
+        try:
+            return lib.progress.phase in ("idle", "cancelled", "error")
+        except Exception:
+            return False
+
+    @staticmethod
+    def _release(lib) -> None:
+        """Stop using `lib`, disposing of it properly.
+
+        A demo library is deleted whole -- photos, catalog and thumbnails all
+        live in one temp folder (see demo.build_temp). A real one only has its
+        scan cancelled, exactly as before.
+        """
+        try:
+            lib.cancel()
+            # Wait for the analysis thread to notice: its sqlite connection is
+            # thread-local, and on Windows a live one keeps catalog.db locked.
+            thread = getattr(lib, "_thread", None)
+            if thread is not None and thread.is_alive():
+                thread.join(timeout=3.0)
+        except Exception:
+            pass
+        if not getattr(lib, "is_demo", False):
+            return
+        try:
+            lib.store.close()
+        except Exception:
+            pass
+        demo.cleanup(getattr(lib, "root", None))
+
     def close(self) -> None:
         with self.lock:
             if self.lib is not None:
+                if getattr(self.lib, "is_demo", False):
+                    # A demo has nothing worth resuming: delete it now rather
+                    # than leaving a temp folder behind.
+                    self._release(self.lib)
+                    self.lib = None
+                    self.generation += 1
+                    return
                 # 不取消：用户只是回首页，扫描该继续跑完。
                 # 放进 _DETACHED，下次打开同一个库时 open() 会把它接回来。
                 wd = getattr(self.lib, "work_dir", None) or paths.catalog_dir(self.lib.root)

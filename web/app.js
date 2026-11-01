@@ -89,6 +89,7 @@ const UNMARK_MS = 370;
 function grab() {
   Object.assign(el, {
     root: $('#rootLabel'), stats: $('#stats'), roBadge: $('#roBadge'),
+    demoBadge: $('#demoBadge'),
     progressFill: $('#progressFill'), progressText: $('#progressText'),
   progPanel: null,
     cardWrap: $('#cardWrap'), photoStage: $('#photoStage'), photo: $('#photo'),
@@ -311,8 +312,16 @@ async function loadState() {
   if (S.generation !== -1 && st.generation !== S.generation) loadQueue();
   S.generation = st.generation;
 
-  el.root.textContent = st.root; el.root.title = st.root;
+  // 演示库的路径是 %TEMP%\guopian-demo-xxxx，写在顶栏里既看不懂也没意义 ——
+  // 它又不是用户打开的文件夹。顶栏直接说清楚"这是演示、会自己删"。
+  if (el.root) {
+    el.root.textContent = st.demo ? '演示项目 · 教程结束后自动删除' : st.root;
+    el.root.title = st.root;
+  }
   el.roBadge.classList.toggle('hidden', !st.read_only);
+  // 「演示」徽章：这个库是教程临时造的，结束就删 —— 不然用户会以为它是
+  // 自己之前打开过的项目，然后找不到它去哪儿了。
+  if (el.demoBadge) el.demoBadge.classList.toggle('hidden', !st.demo);
   renderStats(st);
   renderProgress(st.progress);
   renderTriage(st);
@@ -615,6 +624,8 @@ function commitDecision(action) {
   const c = cur();
   S.animating = false;
   if (!c) { resetHoldVisual(); return; }
+  // 新的单张决定之后，⌫ 该撤的是这一张，而不是上一次多图那一整批。
+  S.lastBatch = null;
 
   const at = S.idx;
   // Show the next card FIRST. Awaiting the server here left nothing on screen
@@ -632,6 +643,7 @@ async function commitClear() {
   const c = cur();
   if (!c || S.busy) { resetHoldVisual(); return; }
   S.busy = true;
+  S.lastBatch = null;
   try { await api('/api/decide', { method: 'POST', body: JSON.stringify({ id: c.id, action: 'clear' }) }); }
   catch (e) { toast('保存失败', 'err'); }
 
@@ -654,9 +666,24 @@ async function decide(action) {
 }
 
 async function undo() {
+  // 多图提交是"一批照片、同一个 batch"，撤回也必须整批 —— 只回退最后一张会
+  // 让库停在一个用户从来没选过的状态。decidegrid 提交时把 batch 记在 S.lastBatch。
+  const batch = S.lastBatch || null;
   try {
-    const r = await api('/api/undo', { method: 'POST' });
+    const r = await api('/api/undo', {
+      method: 'POST', body: JSON.stringify(batch ? { batch } : {}),
+    });
     if (!r.ok) { toast('没有可撤销的操作'); return; }
+    S.lastBatch = null;
+    if (batch) {
+      const ids = (r.result && r.result.photos) || [];
+      await loadQueue();
+      const at = S.queue.findIndex(x => x.id === ids[0]);
+      if (at >= 0) { S.idx = at; render(); }
+      toast(`已撤销整批 ${(r.result && r.result.restored) || ids.length} 张`);
+      loadState();
+      return;
+    }
     toast('已撤销');
     const id = r.result.photo_id;
     const at = S.queue.findIndex(x => x.id === id);
@@ -862,6 +889,8 @@ function closeModal() { el.modal.classList.add('hidden'); }
 /* ═════════════════════════ 首次引导 ═════════════════════════ */
 
 function showCoachOnce() {
+  // 教程自己在讲同一批话，两层浮层叠在一起只会互相挡住。
+  if (S.suppressCoach) return;
   // 截图/自动化用：地址里带 no-coach=1 就不弹这个引导层。
   // 否则用无痕 profile 截出来的每一张图都被它盖住（README 的截图就吃过这个亏）。
   if (location.search.indexOf('no-coach') >= 0) return;

@@ -15,15 +15,17 @@ from typing import Any
 
 from PIL import Image, ImageOps
 
-from . import config
-
 try:  # optional: HEIC/HEIF
     import pillow_heif
 
     pillow_heif.register_heif_opener()
     HAVE_HEIF = True
-except Exception:  # pragma: no cover
+    _HEIF_ERROR = None
+except Exception as _e:  # pragma: no cover
     HAVE_HEIF = False
+    # 记下**为什么**失败。"没装枕头"和"装了但 libheif 加载不了"在界面上
+    # 是两回事，而这两句话都不该靠猜。
+    _HEIF_ERROR = "{}: {}".format(type(_e).__name__, _e)
 
 try:
     import pillow_avif  # noqa: F401
@@ -34,6 +36,17 @@ except Exception:  # pragma: no cover
 
 
 RAW_EXT = {".dng", ".cr2", ".cr3", ".nef", ".arw", ".raf", ".orf", ".rw2", ".pef", ".srw"}
+
+
+def capabilities() -> dict:
+    """Which optional formats this install can actually read.
+
+    Without pillow-heif a HEIC file is not an error anywhere -- it simply never
+    appears in the library, and the user has no way to tell that from "there
+    were no photos in that folder".
+    """
+    return {"heic": bool(HAVE_HEIF), "avif": bool(HAVE_AVIF),
+            "heic_error": _HEIF_ERROR or ""}
 
 # Pillow refuses very large images by default; holiday panoramas exceed it.
 Image.MAX_IMAGE_PIXELS = 600_000_000
@@ -56,7 +69,6 @@ def extract_embedded_jpeg(path: str, max_bytes: int = 64 << 20) -> bytes | None:
 
     best: bytes | None = None
     i = 0
-    n = len(data)
     while True:
         start = data.find(b"\xff\xd8\xff", i)
         if start < 0:

@@ -8,13 +8,8 @@ makes the progressive pipeline in docs/05 possible.
 
 from __future__ import annotations
 
-import os
-
 import math
 import os
-from typing import Any
-
-from PIL import Image
 
 from . import config, faces, imageio, metrics, phash
 
@@ -133,9 +128,13 @@ def evaluate(row: dict, face_rows: list[dict], calib: dict,
     soft_fatal = th.get("soft_fatal") or 0.0
     sharp_median = th.get("sharp_median") or 0.0
     noisy = th.get("noisy") or 1e9
-    contrast_low = th.get("contrast_low") or 0.0
 
     issues: list[dict] = []
+    # 高光/暗部被大面积削掉时，中调掩码里剩下的内容已经不代表这张照片的色彩
+    # 了（天空变成了白块、暗部变成了黑块），此时再判色偏一定是错的。实测
+    # DEMO_02（过曝）和 DEMO_03（欠曝）都被额外标上「白平衡色偏」，偏离本批
+    # 中位 0.21/0.36 —— 那不是白平衡，那是削波。
+    exposure_bad = False
 
     # ---------------------------------------------------------- global
     # Exposure needs BOTH an absolute floor and to stand out in this session.
@@ -145,6 +144,7 @@ def evaluate(row: dict, face_rows: list[dict], calib: dict,
 
     ph = row.get("pct_high")
     if ph is not None and ph > config.PCT_HIGH_FLAG and ph >= high_p:
+        exposure_bad = True
         if ph > config.PCT_HIGH_FATAL:
             issues.append(_issue("overexposed", "fatal", min(1.0, ph / 30.0),
                                  "高光溢出 {:.1f}%".format(ph), evidence={"pct_high": ph}))
@@ -154,6 +154,7 @@ def evaluate(row: dict, face_rows: list[dict], calib: dict,
 
     pl = row.get("pct_low")
     if pl is not None and pl > config.PCT_LOW_FLAG and pl >= low_p:
+        exposure_bad = True
         if pl > config.PCT_LOW_FATAL:
             issues.append(_issue("underexposed", "fatal", min(1.0, pl / 80.0),
                                  "暗部死黑 {:.1f}%".format(pl), evidence={"pct_low": pl}))
@@ -202,7 +203,6 @@ def evaluate(row: dict, face_rows: list[dict], calib: dict,
                              "块效应 {:.2f}".format(bl), evidence={"blockiness": bl}))
 
     # ---------------------------------------------------------- faces
-    judgeable = 0
     for i, f in enumerate(face_rows):
         g = f.get("gates") or {}
         bx = {"x": f.get("x"), "y": f.get("y"), "w": f.get("w"), "h": f.get("h")}
@@ -225,7 +225,6 @@ def evaluate(row: dict, face_rows: list[dict], calib: dict,
             continue
         if not g.get("judge_eyes", False):
             continue  # turned / tiny eyes -> refuse to judge rather than guess
-        judgeable += 1
 
         bl_l, bl_r = f.get("blink_l") or 0.0, f.get("blink_r") or 0.0
         # BOTH eyes, never one. A real blink closes both; a single high reading
@@ -366,13 +365,18 @@ def evaluate(row: dict, face_rows: list[dict], calib: dict,
     # worth reporting is a photo that disagrees with its own siblings.
     cctx = th.get("cast") or {}
     cr, cb = row.get("cast_r"), row.get("cast_b")
-    if cctx and cr is not None and cb is not None:
+    if cctx and cr is not None and cb is not None and not exposure_bad:
         dr = cr - cctx["r_med"]
         db = cb - cctx["b_med"]
         mag = math.hypot(dr, db)
+        # "突出"有两个条件：落在这批的极端分位上，**并且**离中位的距离超过
+        # 这批照片自身的波动（稳健 σ）。后者是必须的 —— 十几张的小库里
+        # 4%/96% 分位就是第二大/第二小值，光靠分位的话"最极端的那张"永远极端。
+        sigma = math.hypot(cctx.get("r_sigma") or 0.0, cctx.get("b_sigma") or 0.0)
+        need = max(config.CAST_MEDIAN_TOL, config.CAST_SIGMA_K * sigma)
         extreme = (cr <= cctx["r_lo"] or cr >= cctx["r_hi"]
                    or cb <= cctx["b_lo"] or cb >= cctx["b_hi"])
-        if extreme and mag >= config.CAST_MEDIAN_TOL:
+        if extreme and mag >= need:
             if dr > 0 and db <= 0:
                 way = "偏暖"
             elif dr < 0 and db >= 0:
@@ -381,12 +385,13 @@ def evaluate(row: dict, face_rows: list[dict], calib: dict,
                 way = "偏绿"
             else:
                 way = "偏品红"
-            sev = "low" if mag < config.CAST_MEDIAN_TOL * 2 else "medium"
+            sev = "low" if mag < need * 2 else "medium"
             issues.append(_issue("color_cast", sev, min(0.85, 0.35 + mag * 4.0),
                                  "{}（偏离本批中位 {:.3f}）".format(way, mag),
                                  evidence={"cast_r": cr, "cast_b": cb,
                                            "r_med": cctx["r_med"],
-                                           "b_med": cctx["b_med"]}))
+                                           "b_med": cctx["b_med"],
+                                           "sigma": round(sigma, 4)}))
 
     # ---------------------------------------------------------- group context
     if group_ctx:

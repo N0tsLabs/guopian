@@ -265,7 +265,6 @@ def main() -> int:
         return 2
 
     html = read("web/index.html")
-    appjs = read("web/app.js")
     css = read("web/style.css")
 
     print("\n== 1. 决策用词只有 config.py 一个真源 ==")
@@ -324,8 +323,6 @@ def main() -> int:
           "{} 个本地脚本".format(len(scripts)))
     check(not os.path.exists(os.path.join(ROOT, "package.json")),
           "没有 package.json（保持无构建步骤）")
-    inline = re.findall(r"<script(?![^>]*\bsrc=)(?![^>]*type=\"module\"[^>]*\bsrc=)[^>]*>",
-                        html)
     check(len(scripts) == 1 and scripts and scripts[0].startswith("/"),
           "index.html 只有一个入口脚本，且从根路径加载",
           "scripts={}".format(scripts))

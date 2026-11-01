@@ -56,9 +56,16 @@ const Home = (() => {
     catch (e) { toast('无法连接本地服务', 'err'); return; }
 
     $('#versionLabel').textContent = 'v' + (data.version || '');
-    const fa = data.face_available || {};
-    $('#faceHint').textContent = fa.ok
-      ? '' : '人脸检测未启用：' + (fa.message || '模型缺失');
+    // 能力清单：人脸模型、照片向量（onnxruntime）、HEIC 支持。三样都是"缺了
+    // 不报错，只是悄悄变弱"，所以在这里一次说清楚，而不是让用户对着结果猜。
+    const NAMES = { faces: '人脸检测', vectors: '相似分组（照片向量）', heic: 'HEIC/HEIF' };
+    const caps = data.capabilities || {};
+    const missing = Object.keys(caps)
+      .filter(k => caps[k] && caps[k].ok === false)
+      .map(k => (NAMES[k] || k) + '：' + (caps[k].message || '不可用'));
+    const hint = $('#faceHint');
+    hint.textContent = missing.join('　');
+    hint.title = missing.join('\n');
 
     // The static markup carries <b data-label="keep"></b> placeholders instead of
     // the words themselves. Fill them here, and hand the same object to the app
@@ -101,9 +108,10 @@ const Home = (() => {
 
     // First ever run: nothing has been opened yet. Offer the tour before the
     // home screen asks for a folder -- the first thing anyone meets should
-    // explain what the app does, not demand they pick photos.
+    // explain what the app does, not demand they pick photos. This tour brings
+    // its own demo library, so it can also show the project screens.
     if (!(data.recent || []).length && !data.current && !Tour.seen()) {
-      Tour.open({ hasLibrary: !!data.current, onExit: () => refresh() });
+      Tour.start();
       return true;
     }
     return false;
@@ -188,21 +196,29 @@ const Home = (() => {
       </button>`;
     }).join('');
 
+    // A failed cover gets exactly one retry. The home screen requests all the
+    // covers at once and a single failure used to leave a broken-image icon
+    // until the next refresh.
+    //
+    // This block used to sit INSIDE the click handler below, which meant the
+    // retry handlers were only ever registered after you had already clicked a
+    // card -- too late to do anything, and dead weight on every click.
+    wrap.querySelectorAll('img[data-root]').forEach((im) => {
+      im.onerror = () => {
+        if (im.dataset.retried) return;
+        im.dataset.retried = '1';
+        const root = im.dataset.root;
+        setTimeout(() => {
+          im.src = `/api/cover?root=${encodeURIComponent(root)}&r=${Date.now()}`;
+        }, 200);
+      };
+    });
+
     wrap.querySelectorAll('.projCard').forEach(el => {
       const r = PROJECTS.find(x => x.path === el.dataset.path);
       el.onclick = (ev) => {
         const hit = ev.target.closest('[data-act]');
-        // 封面失败重试一次。首页的封面是并发请求的，偶发一张失败就留下碎图标；
-  // 重试带上时间戳，绕开浏览器缓存里的那次失败。
-  document.querySelectorAll('#recentList img[data-root]').forEach((im) => {
-    im.onerror = () => {
-      if (im.dataset.retried) return;
-      im.dataset.retried = '1';
-      const root = im.dataset.root;
-      setTimeout(() => { im.src = `/api/cover?root=${encodeURIComponent(root)}&r=${Date.now()}`; }, 200);
-    };
-  });
-  // The whole card opens the library, so the small actions on the cover
+        // The whole card opens the library, so the small actions on the cover
         // have to stop the click rather than sit inside a nested button.
         if (hit) { ev.stopPropagation(); cardAction(hit.dataset.act, r, el); return; }
         openLibrary(r.path);
@@ -515,6 +531,7 @@ const Home = (() => {
 
   function bind() {
     $('#btnOpen').onclick = () => openBrowser();
+    $('#btnDemo').onclick = () => Tour.start();
     $('#browserClose').onclick = closeBrowser;
     $('#browserCancel').onclick = closeBrowser;
     $('#browserOpen').onclick = () => {
@@ -608,6 +625,19 @@ export { Home };
    就是循环依赖。所以那条线用注入：把 refresh 交出去，app.js 在需要时调用。
    configure 必须在 boot() 之前，因为 boot() 可能立刻就打开一个库。 */
 configure({ onLibraryClosed: Home.refresh });
+
+/* 教程的演示库结束时要知道怎么回首页 —— 那条线归这里（URL、视图、项目列表
+   都在这个文件里），tour.js 只负责调用。 */
+Tour.configure({
+  onDemoEnd: () => {
+    // 演示库已经被服务端删了：先停掉 /api/state 的轮询，否则下一拍必然 409，
+    // 控制台里留下一条红字，还得再走一遍 409 -> 回首页的逻辑。
+    stop();
+    history.pushState({}, '', '/');
+    Views.show('homeView');
+    Home.refresh();
+  },
+});
 
 /* 启动。写在模块体最后一行：此刻 import 图已经保证 core.js 和 app.js 都
    求值完毕，所以 boot() 里 await 回来的那一步调用 setLabels() 是安全的。 */

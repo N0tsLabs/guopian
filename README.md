@@ -42,16 +42,23 @@
 
 | 类别 | 具体项 |
 | --- | --- |
-| 曝光 | 高光溢出、暗部死黑、欠曝、过曝、对比度偏低 |
-| 清晰度 | 整张不够清晰（取最清楚的那块判断，背景虚化不算）、噪点偏高 |
+| 曝光 | 高光溢出、暗部死黑、对比度偏低（发灰） |
+| 清晰度 | 整张不够清晰（取最清楚的那块判断，背景虚化不算）、噪点偏高、压缩痕迹明显 |
 | 色彩 | 白平衡偏蓝 / 偏黄（相对同一场拍摄的其他照片） |
-| 人脸 | 闭眼、眼睛可能闭着、张嘴（可能在说话）、皱眉、视线没看镜头、缺眼神光、人脸贴边、人脸区域不清晰 |
+| 人脸 | 闭眼、眼睛可能闭着、张嘴（可能在说话）、眉头压低、缺眼神光、人脸贴边、人脸区域不清晰 |
 | 连拍 | 相似分组、组内排名靠后、与另一张几乎完全相同 |
 | 构图 | 画面倾斜 |
+| 文件 | 分辨率偏低 |
 
 每一项都标出**具体是哪张脸、什么程度**，不是一个笼统的分数。
-判断阈值不是硬编码的绝对值，而是按**同一台相机、同一场拍摄**的分布标定出来的 ——
+
+阈值尽量相对、而不是写死的绝对分数：能按**同一台相机、同一场拍摄**的分布标定的
+都标定（清晰度、曝光、色偏、相似分组），每个相对阈值再加一道绝对下限兜底 ——
 雪地的高光和婚礼的白纱不该用同一把尺子。
+
+**「视线没看镜头」默认关闭**：它来自 `eyeLook*` 回归量，实测在真实照片上误报率很高
+（抽查 4 张明确看着镜头的照片，3 张被判成没看镜头），所以宁可不报。原因写在
+[docs/design.md](docs/design.md)。
 
 ## 支持的格式
 
@@ -67,6 +74,12 @@ RAW 和 HEIC 读的是文件里内嵌的预览图，不是全分辨率解码 —
 ## 怎么用
 
 <img src="docs/img/home.png" alt="首页：最近打开的项目，每个项目显示已分析张数" width="100%">
+
+### 0. 先看看它怎么用
+
+首页有「先看看它怎么用」：它把随包的 12 张演示照片复制到系统临时目录，打开这个
+临时项目走一遍完整教程，**结束时整个删掉** —— 不进「最近打开」，也不碰你自己的
+照片。想直接开始就跳过这一步。
 
 ### 1. 打开一个文件夹
 
@@ -108,9 +121,7 @@ RAW 和 HEIC 读的是文件里内嵌的预览图，不是全分辨率解码 —
 | 按键 | 作用 |
 | --- | --- |
 | <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> | 移动焦点 |
-| <kbd>K</kbd> | 焦点这张「留下」 |
-| <kbd>S</kbd> | 焦点这张「精选」 |
-| <kbd>空格</kbd> | 放大看（再按一次关闭） |
+| <kbd>空格</kbd> / <kbd>Z</kbd> | 放大看（再按一次关闭）；放大时 <kbd>K</kbd> 留下、<kbd>S</kbd> 精选 |
 | <kbd>Enter</kbd> | 提交这一批 |
 | <kbd>Esc</kbd> | 退出多图 |
 
@@ -137,7 +148,13 @@ RAW 和 HEIC 读的是文件里内嵌的预览图，不是全分辨率解码 —
 
 ## 安装
 
-### 从源码运行（目前唯一方式）
+### 直接下载（Windows）
+
+到 [Releases](../../releases) 下载最新的 `Guopian-*-win64.zip`，解压，双击 `guopian.exe`。
+不需要装 Python，也不需要联网（两个模型已经打进去了；只有在你手动删掉 `models/`
+时才会去下载一次）。
+
+### 从源码运行
 
 需要 Python 3.10+。
 
@@ -199,11 +216,27 @@ python evaluation/web_check.py    # JS 引用的 id 是否都在 HTML、切换�
 node   evaluation/gridlayout_test.mjs
 ```
 
+改判定逻辑之前，先看看准确率怎么量（`evaluation/README.md` 最后一节）：
+
+```bash
+python run.py "D:\照片" --report --json > before.json   # 改之前
+python run.py "D:\照片" --report --json > after.json    # 改之后
+python evaluation/score.py "D:\照片" --labels evaluation/labels.csv   # 每个问题的 TP/FP/FN
+```
+
 需要服务器（先把 run.py 跑起来）：
 
 ```bash
 python evaluation/full_check.py   # 63 项：接口、数据一致性、删除流程
 python evaluation/ui_e2e.py       # 42 项：真实浏览器里逐项操作与断言
+node   evaluation/cdp_e2e.mjs     # 67 项：同上，但用 CDP 连独立浏览器，不需要扩展
+```
+
+`cdp_e2e.mjs` 需要先起一个带调试端口的浏览器（详见 [evaluation/README.md](evaluation/README.md)）：
+
+```bash
+msedge --user-data-dir=%TEMP%\guopian-e2e-profile --remote-debugging-port=9224 http://127.0.0.1:8765/
+node evaluation/cdp_e2e.mjs 9224
 ```
 
 `ui_e2e.py` 会造一个临时照片库（复制 `evaluation/testset`，没有就现场合成），
@@ -222,7 +255,7 @@ run.py ──► guopian/server.py ──► guopian/pipeline.py ──► catal
                 │                      │
                 │                      ├─ analyze.py  曝光/清晰度/色彩/人脸
                 │                      ├─ group.py    相似分组（向量 + 时间窗）
-                │                      └─ apply.py    归档到三个文件夹
+                │                      └─ decisions.py 归档到三个文件夹
                 │
                 └─► web/（16 个 ES module，浏览器里跑）
 ```

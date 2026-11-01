@@ -10,7 +10,7 @@ import sys
 
 from PIL import Image, ImageDraw, ImageOps
 
-ROOT = r"E:\ai project\guopian"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from guopian import config, imageio  # noqa: E402

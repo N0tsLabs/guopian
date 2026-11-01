@@ -4,7 +4,6 @@ Runs entirely on a synthetic library under .cache: fake jpegs, a fake catalog,
 then a settings change, then checks the folder moved, the files are still inside
 it, and every catalog row now points somewhere that exists.
 """
-import json
 import os
 import shutil
 import sqlite3
@@ -13,7 +12,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from guopian import config, paths, session  # noqa: E402
+from guopian import paths, session  # noqa: E402
 
 LIB = os.path.join(ROOT, '.cache', 'rentest', 'shoot')
 

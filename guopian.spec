@@ -40,8 +40,13 @@ for cand in ("guopian.ico", "guopian.png", "guopian.icns"):
 
 # --------------------------------------------------------------- what to drop
 # ~47 MB of FFmpeg video backends (two copies) -- we never open a video.
-# ~22 MB of libx265, the HEVC *encoder*: we only ever decode, and it is GPL.
-DROP_BINARIES = ("opencv_videoio_ffmpeg", "x265")
+#
+# libx265 used to be dropped here too, on the theory that "we only decode".
+# That is true of the app but not of libheif: it links libx265 at load time, so
+# removing it made `import _pillow_heif` fail and HEIC support vanish from the
+# packaged build with no error anywhere (found by inspecting /api/home's
+# capabilities: heic.ok was false). 21 MB is the price of the feature.
+DROP_BINARIES = ("opencv_videoio_ffmpeg",)
 
 # ---------------------------------------------------------------- datas
 datas = [
@@ -82,13 +87,34 @@ datas += collect_data_files("cv2")
 hiddenimports += ["cv2"]
 
 # HEIC
+#
+# pillow_heif 的 libheif 不在包目录里：轮子把它 .dll 直接放在 site-packages 根，
+# 旁边才是 `_pillow_heif.*.pyd`。collect_all 只扫包目录，于是打包版能 import
+# pillow_heif，却在加载 _pillow_heif 时因为找不到 libheif 而失败 —— 而 imageio
+# 把那个 ImportError 吞成了 HAVE_HEIF=False，表现就是"HEIC 照片进不了库"，
+# 没有任何报错。实测自检里 heic: False 才发现。
 try:
     heif_datas, heif_bins, heif_hidden = collect_all("pillow_heif")
     datas += heif_datas
     binaries += heif_bins
     hiddenimports += heif_hidden
-except Exception:
-    pass
+    import glob
+    import pillow_heif
+
+    _sp = os.path.dirname(os.path.dirname(os.path.abspath(pillow_heif.__file__)))
+    # 不是一个 DLL：delvewheel 把 libheif 连同它的依赖（libde265 / x265 /
+    # libstdc++ / libwinpthread / libgcc）一起放在 site-packages 根目录，
+    # 一个都不能少 —— 少一个就是 "DLL load failed while importing _pillow_heif"。
+    _heif_dlls = []
+    for _pat in ("libheif-*.dll", "libde265-*.dll", "libx265-*.dll",
+                 "libstdc++-*.dll", "libgcc_s_seh-*.dll", "libwinpthread-*.dll"):
+        _heif_dlls += glob.glob(os.path.join(_sp, _pat))
+    for _dll in _heif_dlls:
+        binaries.append((_dll, "."))
+    print("guopian.spec: +pillow_heif dlls:",
+          ", ".join(os.path.basename(d) for d in _heif_dlls))
+except Exception as _e:                                   # pragma: no cover
+    print("guopian.spec: pillow_heif collect failed:", _e)
 
 # ---------------------------------------------------------------- excludes
 excludes = [
@@ -96,7 +122,9 @@ excludes = [
     "torch", "torchvision", "torchaudio", "tensorflow", "tensorboard",
     "jax", "jaxlib", "flax", "scipy", "pandas", "pandas.compat",
     "sklearn", "numba", "llvmlite", "cupy", "paddle", "paddlepaddle",
-    "onnx", "onnxruntime", "dlib", "IPython", "jupyter", "notebook",
+    # onnxruntime 曾经也在这里 —— 那时照片向量还是可选项。现在相似分组默认
+    # 用它，排掉它等于让打包版静默退回 pHash（模型在、但它加载不了）。
+    "onnx", "dlib", "IPython", "jupyter", "notebook",
     "nbformat", "nbconvert", "sphinx", "pytest",
     # GUI toolkits we do not use (tkinter IS used, so it stays)
     "PyQt5", "PyQt6", "PySide2", "PySide6", "wx", "gi",
@@ -107,6 +135,16 @@ excludes = [
     # mediapipe paths we never touch
     "sounddevice", "mediapipe.tasks.python.audio", "mediapipe.tasks.python.text",
 ]
+
+# onnxruntime 是原生扩展：它的 .pyd/.dll 不会被 import 分析带进来，
+# 必须显式收集，否则打包版 exec 到 embed.session() 时才炸。
+try:
+    _ort_datas, _ort_bins, _ort_hidden = collect_all("onnxruntime")
+    datas += _ort_datas
+    binaries += _ort_bins
+    hiddenimports += _ort_hidden
+except Exception as _e:                                   # pragma: no cover
+    print("guopian.spec: onnxruntime collect failed:", _e)
 
 block_cipher = None
 

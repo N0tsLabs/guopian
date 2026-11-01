@@ -147,6 +147,8 @@ def main() -> int:
     ap.add_argument("--no-scan", action="store_true", help="打开文件夹但不自动扫描")
     ap.add_argument("--report", action="store_true",
                     help="只做分析并打印报告，不启动界面")
+    ap.add_argument("--json", action="store_true",
+                    help="配合 --report：输出机器可读的 JSON（给 score.py 用）")
     ap.add_argument("--selftest", action="store_true",
                     help="启动服务并自检一次，然后退出。排查打包问题用。")
     ap.add_argument("--version", action="version",
@@ -189,7 +191,8 @@ def main() -> int:
     if folder:
         folder = os.path.abspath(os.path.expanduser(folder))
         if not os.path.isdir(folder):
-            launcher.fatal("过片", "不是有效的文件夹:\n{}".format(folder))
+            launcher.fatal("过片", "不是有效的文件夹:\n{}".format(folder),
+                           dialog=not (args.report or args.selftest))
             return 2
         if args.reset:
             import shutil
@@ -197,9 +200,17 @@ def main() -> int:
             shutil.rmtree(args.work_dir or paths.catalog_dir(folder), ignore_errors=True)
         try:
             lib = sess.open(folder, work_dir=args.work_dir,
-                            read_only=args.read_only, scan=not args.no_scan)
+                            read_only=args.read_only, scan=not args.no_scan,
+                            # A diagnostic run must not rewrite "recently opened":
+                            # --report and --selftest exist to inspect a folder,
+                            # not to adopt it. Without this, checking a folder with
+                            # `--report` silently added it to the user's project
+                            # list -- which looks exactly like the app having
+                            # opened something behind their back.
+                            remember_lib=not (args.report or args.selftest))
         except Exception as e:
-            launcher.fatal("过片无法打开这个文件夹", "{}\n\n{}".format(e, folder))
+            launcher.fatal("过片无法打开这个文件夹", "{}\n\n{}".format(e, folder),
+                           dialog=not (args.report or args.selftest))
             return 1
         paths.log("open root={} work={} read_only={} frozen={}".format(
             folder, lib.work_dir, args.read_only, paths.is_frozen()))
@@ -212,7 +223,7 @@ def main() -> int:
         if sess.require() is None:
             print("--report 需要指定照片文件夹")
             return 2
-        return _report(sess.require())
+        return _report(sess.require(), as_json=args.json)
 
     if args.selftest:
         return _selftest(sess, args.port)
@@ -265,6 +276,10 @@ def _selftest(sess, port: int) -> int:
     print("  bundle  : {}".format(config.ROOT_DIR))
     print("  web dir : {} (exists={})".format(config.WEB_DIR, os.path.isdir(config.WEB_DIR)))
     print("  model   : {} (exists={})".format(config.FACE_MODEL, os.path.exists(config.FACE_MODEL)))
+    from guopian import imageio as _imageio
+
+    caps = _imageio.capabilities()
+    print("  heic    : {} / avif: {}".format(caps["heic"], caps["avif"]))
     print("  stdout  : {} / stderr: {}".format(
         type(sys.stdout).__name__, type(sys.stderr).__name__))
     print("  browser : {}".format(_browser_path() or "(none found)"))
@@ -332,12 +347,17 @@ def _selftest(sess, port: int) -> int:
                 q = json.loads(r.read().decode("utf-8"))
                 if q.get("items"):
                     pid = q["items"][0]["id"]
+                    # The URL carries the library's slug: photo ids restart at 1
+                    # in every library, so /img/<pid>/<size> is not a valid
+                    # route any more (see server.image). It was, once, and this
+                    # check kept asking for it -- so `--selftest` reported one
+                    # failure on every library that had a single photo in it.
+                    slug = paths.slug(lib.root)
                     for sz in ("small", "card"):
-                        with urllib.request.urlopen(
-                                base + "/img/{}/{}".format(pid, sz), timeout=30) as rr:
+                        url = "/img/{}/{}/{}".format(slug, pid, sz)
+                        with urllib.request.urlopen(base + url, timeout=30) as rr:
                             b = rr.read()
-                            checks.append(("/img/{}/{}".format(pid, sz), len(b) > 0,
-                                           "{} bytes".format(len(b))))
+                            checks.append((url, len(b) > 0, "{} bytes".format(len(b))))
         except Exception as e:
             checks.append(("/api/queue", False, str(e)))
 
@@ -366,23 +386,58 @@ def _face_status():
     return faces.available()
 
 
-def _report(lib) -> int:
+def _report(lib, as_json: bool = False) -> int:
     import time
 
     t0 = time.time()
     files = lib.scan_files()
     lib.store.upsert_scanned(files)
-    print("  发现 {} 个图片文件".format(len(files)))
+    if not as_json:
+        print("  发现 {} 个图片文件".format(len(files)))
 
     n = lib.analyze_pending()
     dt = time.time() - t0
-    print("  分析 {} 张，用时 {:.1f}s  ({:.0f} ms/张，{} 线程)".format(
-        n, dt, (dt / n * 1000) if n else 0, lib.workers))
+    if not as_json:
+        print("  分析 {} 张，用时 {:.1f}s  ({:.0f} ms/张，{} 线程)".format(
+            n, dt, (dt / n * 1000) if n else 0, lib.workers))
 
     res = lib.recompute()
-    print("  分组 {} 组，建议分布 {}".format(res["groups"], res.get("suggest")))
+    if not as_json:
+        print("  分组 {} 组，建议分布 {}".format(res["groups"], res.get("suggest")))
 
     rows = lib.store.load_rows()
+    if as_json:
+        # 给 evaluation/score.py 和别的脚本吃：一张一张的原始量 + 判定，
+        # 不是给人看的表格。
+        out = []
+        for r in rows:
+            iss = lib.store.conn.execute(
+                "SELECT kind, severity, label_zh, confidence, detail, face_idx "
+                "FROM issues WHERE photo_id=? ORDER BY CASE severity "
+                "WHEN 'fatal' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 "
+                "WHEN 'low' THEN 3 ELSE 4 END", (r["id"],)).fetchall()
+            out.append({
+                "id": r["id"], "name": r["name"], "rel_path": r["rel_path"],
+                "decision": r["decision"], "suggest": r["suggest"],
+                "suggest_reason": r["suggest_reason"],
+                "width": r["width"], "height": r["height"],
+                "camera": r["camera"], "lens": r["lens"],
+                "pct_high": r["pct_high"], "pct_low": r["pct_low"],
+                "lap_var_mp": r["lap_var_mp"], "noise": r["noise"],
+                "cast_r": r["cast_r"], "cast_b": r["cast_b"],
+                "face_count": r["face_count"],
+                "group_id": r["group_id"], "group_rank": r["group_rank"],
+                "group_size": r["group_size"],
+                "issues": [dict(i) for i in iss],
+            })
+        import json
+
+        print(json.dumps({"root": lib.root, "count": len(out),
+                          "analysis_version": config.ANALYSIS_VERSION,
+                          "suggest": res.get("suggest"), "photos": out},
+                         ensure_ascii=False, indent=1))
+        return 0
+
     print("\n{:<22} {:>9} {:>7} {:>7} {:>6} {:>4}  {:<26} {}".format(
         "文件", "清晰度", "高光%", "暗部%", "噪点", "脸", "问题", "建议"))
     print("-" * 118)

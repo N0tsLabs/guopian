@@ -5,19 +5,14 @@ from __future__ import annotations
 import io
 import json
 import os
-import sqlite3
-import threading
-import time
 import subprocess
 import sys
+import threading
 
 from flask import Flask, Response, jsonify, request, send_file, send_from_directory
 
-from . import config, decisions, imageio, paths, session as session_mod
+from . import config, decisions, paths, session as session_mod
 from .session import Session
-
-# kept for backward compatibility with older imports
-BROWSER_EXT = config.BROWSER_DISPLAYABLE
 
 # Set when the app window actually renders the page. Launching a browser is
 # not proof that a window appeared -- Edge can crash on startup, hand off to an
@@ -194,6 +189,7 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
                 "slug": paths.slug(lib.root),
                 "work_dir": lib.work_dir,
                 "read_only": bool(lib.read_only),
+                "demo": bool(getattr(lib, "is_demo", False)),
                 "counts": lib.counts(),
                 "progress": lib.progress.snap(),
                 "issue_summary": _issue_summary(lib),
@@ -204,6 +200,8 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
             "recent": session_mod.recent_libraries(),
             "current": state,
             "face_available": _faces_ok(),
+            # 三个"缺了不会报错、只会悄悄变弱"的能力，放在一起说清楚。
+            "capabilities": _capabilities(),
             "platform": _platform(),
             "labels": _labels(),
         })
@@ -238,6 +236,43 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
                         "slug": paths.slug(lib.root),
                         "read_only": bool(lib.read_only),
                         "writable": writable})
+
+    @app.post("/api/demo")
+    def demo_start():
+        """Open a throwaway library so a first-time user can be shown the app.
+
+        Everything about it is temporary: the photos are generated into the
+        system temp dir, the catalog lives in the same folder, and it is never
+        written to "recent". Closing it deletes the whole thing. That is what
+        makes "just show me how this works" safe to click.
+        """
+        from . import demo as demo_mod
+
+        demo_mod.cleanup_stale()
+        try:
+            folder = demo_mod.copy_to_temp()
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+        try:
+            lib = sess.open(folder,
+                            work_dir=os.path.join(folder, config.WORK_DIR_NAME),
+                            scan=True, remember_lib=False, is_demo=True)
+        except Exception as e:
+            demo_mod.cleanup(folder)
+            return jsonify({"ok": False,
+                            "error": "{}: {}".format(type(e).__name__, e)}), 500
+        return jsonify({"ok": True, "demo": True, "root": lib.root,
+                        "slug": paths.slug(lib.root),
+                        "generation": sess.generation})
+
+    @app.post("/api/demo/end")
+    def demo_end():
+        """Close the demo library and delete its folder. Safe when none is open."""
+        lib = sess.require()
+        had = bool(lib is not None and getattr(lib, "is_demo", False))
+        if had:
+            sess.close()
+        return jsonify({"ok": True, "ended": had, "generation": sess.generation})
 
     @app.post("/api/close")
     def close_library():
@@ -331,6 +366,7 @@ def create_app(sess: Session, open_browser: bool = True, port: int = 0,
             # 毫无关系的照片上。
             "catalog_key": _catalog_key(lib),
             "read_only": bool(lib.read_only),
+            "demo": bool(getattr(lib, "is_demo", False)),
             "generation": sess.generation,
             "progress": prog,
             "counts": counts,
@@ -863,24 +899,33 @@ def _faces_ok() -> dict:
     return {"ok": ok, "message": msg}
 
 
+def _capabilities() -> dict:
+    """Optional pieces that degrade silently when missing.
+
+    每条都是"少装了东西"而不是"出错了"：没有 onnxruntime，相似分组退回
+    pHash；模型没下完，人脸那几项整个不参与；没有 pillow-heif，HEIC 照片
+    根本不会进库。界面上必须说出来，否则用户看到的只是"结果不对"。
+    """
+    from . import embed as embed_mod
+    from . import faces as faces_mod
+    from . import imageio as imageio_mod
+
+    face_ok, face_msg = faces_mod.available()
+    emb_ok, emb_msg = embed_mod.available()
+    img = imageio_mod.capabilities()
+    return {
+        "faces": {"ok": face_ok, "message": face_msg or ""},
+        "vectors": {"ok": emb_ok, "message": emb_msg or ""},
+        "heic": {"ok": img["heic"],
+                 "message": "" if img["heic"] else
+                 ("没有 pillow-heif，HEIC/HEIF 会被跳过"
+                  if not img.get("heic_error") else
+                  "pillow-heif 装上了但用不了：{}".format(img["heic_error"]))},
+    }
+
+
 _COVER_LOCK = threading.Lock()
 _COVER_CACHE: dict[str, bytes] = {}
-
-
-def _writable(folder: str) -> bool:
-    """这个文件夹我们能不能往里写（决定要不要自动只读打开）。
-
-    用"真建一个临时文件再删掉"来判断，而不是 os.access：Windows 上访问控制
-    列表和只读介质都可能让 access 说可以、实际写入却失败。
-    """
-    probe = os.path.join(folder, ".guopian_write_test")
-    try:
-        with open(probe, "w", encoding="utf-8") as fh:
-            fh.write("ok")
-        os.remove(probe)
-        return True
-    except OSError:
-        return False
 
 
 def _catalog_key(lib) -> str:

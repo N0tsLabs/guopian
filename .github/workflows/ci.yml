@@ -1,0 +1,76 @@
+name: CI
+
+# 这个项目最典型的 bug 类型是「静默失效」：同一个词写两处、.btn 定义两次、
+# 依赖漏 import、自检 URL 过期。每一项在被发现之前都不会报错。所以哪怕只是
+# 最便宜的几项，也要让机器天天跑。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  static:
+    name: 封装守卫与前端冒烟
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # pyproject 里开了 E/F/W/I/UP/B 全套，但存量代码还有几百条风格项
+      # （大量 .format() -> f-string 之类）。先只把「真错误」当红灯：
+      # 未定义名、重复定义、没用到的变量、语法级问题。
+      - name: ruff（错误级）
+        run: |
+          pip install ruff
+          ruff check guopian run.py scripts --select F,E7,E9 --line-length 100
+
+      - name: 决策用词 / 颜色变量 / 模块依赖图
+        run: python evaluation/hygiene.py
+
+      - name: JS 引用的 id 与 class 是否都存在
+        run: python evaluation/web_check.py
+
+      - name: 前端冒烟（DOM 桩 + 真实数据结构）
+        run: node evaluation/web_smoke.js
+
+      - name: 网格布局
+        run: node evaluation/gridlayout_test.mjs
+
+  selftest:
+    name: 装真依赖后起服务自检
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 依赖
+        run: pip install -r requirements.txt
+
+      - name: 模型缓存
+        id: model-cache
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: guopian-models-v1
+
+      - name: 下载模型
+        run: python scripts/fetch_models.py
+
+      - name: 自检（用随包的演示照片，不碰任何人的照片）
+        run: |
+          mkdir -p /tmp/lib
+          cp guopian/assets/demo/*.jpg /tmp/lib/
+          python run.py /tmp/lib --selftest --no-open --port 8811

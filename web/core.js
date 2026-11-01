@@ -28,13 +28,16 @@ const G = (() => {
   }
 
   let toastTimer = null;
-  function toast(msg, kind) {
+  /* `ms` exists for the few messages that describe work still going on (the
+     tutorial's "正在准备演示照片…" runs for several seconds). A 2.8 s toast for
+     a 7 s job disappears halfway and then the screen looks frozen. */
+  function toast(msg, kind, ms) {
     const t = $('#toast');
     if (!t) return;
     t.textContent = msg;
     t.className = 'toast ' + (kind || '');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.classList.add('hidden'), 2800);
+    toastTimer = setTimeout(() => t.classList.add('hidden'), ms || 2800);
   }
 
   function esc(s) {

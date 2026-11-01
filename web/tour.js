@@ -1,7 +1,8 @@
-/* 过片 Guopian — 新手引导。
+/* 过片 Guopian — 新手教程。
  *
- * @requires web/core.js    G ( $ $$ esc )
+ * @requires web/core.js    G ( $ esc api toast ) and Views
  * @requires web/state.js   S
+ * @requires web/app.js     enter() —— 演示库建好以后要用同一条入口进项目
  * @requires web/index.html #tour / #tourSpot / #tourCard 这层壳
  *
  * 教程指的**就是真实界面上的元素**，不画一套假的。
@@ -13,21 +14,39 @@
  * 现在改成：高亮真实元素、把其余部分压暗。界面怎么变，教程自动跟着变，
  * 因为它指的就是那些元素本身。
  *
- * 两种状态：
- *   - 没打开项目时，只讲首页那三步（打开文件夹 / 最近项目），然后收尾
- *   - 已经打开项目时，接着讲项目里的那几屏
- * 没有项目却硬讲"点击卡片"这种步骤，只会让人对着不存在的按钮发呆。
+ * ══════════════════════════ 两幕 ══════════════════════════
+ *
+ * 教程是一段**连续**的流程，不是"首页看几条、然后自己想办法"：
+ *
+ *   第一幕  首页：这是什么、怎么打开一个文件夹、最近打开在哪
+ *   幕间    点「下一步」时，服务端现场画 12 张临时照片，打开成一个演示库，
+ *           整页进度条跑完自动进项目 —— 不需要用户去点任何按钮
+ *   第二幕  项目：左边列表、右边大图、按键、多选、筛选、归档
+ *   收尾    "这些照片是临时造的" → 点「开始用」→ 删掉演示库 → 回首页
+ *
+ * 于是**整个教程里看到的照片都是演示数据**，只存在于这次教程期间；教程一结束
+ * 就整个删除，首页回到干净状态（「最近打开」里不会有它）。
+ *
+ * 两种入口：
+ *   Tour.start()                    从首页开始，带演示库（首次运行 / 「先看看它怎么用」）
+ *   Tour.open({ hasLibrary: true }) 已经在项目里时，只讲项目那几屏（设置里重看）
  */
 
-import { G, Views } from './core.js';
+import { G, Views, setLibSlug } from './core.js';
 import { S } from './state.js';
+import { enter } from './app.js';
 
 const Tour = (() => {
-  const { $, esc } = G;
+  const { $, esc, api, toast } = G;
 
   const SEEN_KEY = 'guopian.tour.v1';
   let step = 0;
   let steps = [];
+  // 这一趟教程是不是要自带一个演示库；以及它到底建出来没有。
+  // 两者分开：用户可能在第一幕就按了跳过，那时什么都还没建，也就没什么可删。
+  let demoMode = false;
+  let demoReady = false;
+  let onDemoEnd = () => {};
 
   const home = () => Views.show('homeView');
   const proj = () => Views.show('appView');
@@ -38,10 +57,10 @@ const Tour = (() => {
     return hasLib || !!(S.state && S.state.root);
   }
 
-  function buildSteps() {
-    const inProject = libraryOpen();
+  /* ─────────────────────────── 第一幕：首页 ─────────────────────────── */
 
-    const homeSteps = [
+  function homeSteps() {
+    return [
       {
         view: 'home',
         t: '这是过片',
@@ -60,22 +79,17 @@ const Tour = (() => {
       {
         view: 'home',
         t: '打开过的会留在这里',
-        b: '下次点一下就直接回来 —— 而且会回到你上次看到的那张照片。',
+        b: '下次点一下就直接回来，还会回到你上次看到的那张。'
+         + '第一次用这里是空的，没关系 —— 下一步就用一批临时照片试一遍。',
         sel: '#recentList',
       },
     ];
+  }
 
-    if (!inProject) {
-      return homeSteps.concat([{
-        view: 'home',
-        t: '就这些',
-        b: '先打开一个文件夹，剩下的过片会带着你走。'
-         + '**随时可以在设置里重看这个教程。**',
-        sel: '#openSettings',
-      }]);
-    }
+  /* ─────────────────────────── 第二幕：项目 ─────────────────────────── */
 
-    return homeSteps.concat([
+  function projectSteps() {
+    return [
       {
         view: 'app',
         t: '左边是全部照片',
@@ -86,7 +100,8 @@ const Tour = (() => {
         view: 'app',
         t: '右边是当前这一张',
         b: '下面那行是拍摄参数。检测到问题时会在这里列出来 ——'
-         + '比如模糊、过曝、视线没看镜头。',
+         + '比如模糊、过曝、噪点偏高。这一批里故意做过曝、欠曝、失焦、'
+         + '噪点、偏蓝、偏黄各一张，还有一组连拍里两张一模一样。',
         sel: '#photoStage',
       },
       {
@@ -116,13 +131,57 @@ const Tour = (() => {
         b: '把照片分进三个文件夹。**没审过的留在原地。** 会先让你确认，分完还能撤回。',
         sel: '#btnApply',
       },
-      {
-        view: 'app',
+    ];
+  }
+
+  /* ─────────────────────────── 组装 ─────────────────────────── */
+
+  function buildSteps() {
+    // 演示库建在幕间，所以第一幕开始时"项目"一定还没打开。
+    const inProject = demoMode ? false : libraryOpen();
+    const base = homeSteps();
+
+    if (demoMode) {
+      return base.concat([
+        {
+          view: 'home',
+          t: '先拿一批临时照片试一遍',
+          // 这一步没有高亮目标：卡片居中，点「下一步」才真正开始造照片。
+          b: '接下来会打开一个装了 12 张照片的临时项目（过曝、欠曝、失焦、噪点、偏色、'
+           + '连拍重复各一张），用它把整套流程走一遍。**这些照片只存在于这次教程里，'
+           + '结束就删掉。**',
+          sel: null,
+        },
+        // 第一步进项目，进场前先把这个演示库建出来。
+        Object.assign({}, projectSteps()[0], { act: 'demo' }),
+        ...projectSteps().slice(1),
+        {
+          view: 'app',
+          t: '这些照片是临时造的',
+          b: '它们放在系统临时目录，**结束教程就整个删掉** ——'
+           + '不会出现在「最近打开」里，也没有碰你自己的任何一张照片。'
+           + '点「开始用」就回首页，从你自己的文件夹开始。',
+          sel: '#backHome',
+        },
+      ]);
+    }
+
+    if (!inProject) {
+      return base.concat([{
+        view: 'home',
         t: '就这些',
-        b: '随时可以在设置里重看这个教程。',
-        sel: '#btnSettings',
-      },
-    ]);
+        b: '先打开一个文件夹，剩下的过片会带着你走。'
+         + '**随时可以在设置里重看这个教程。**',
+        sel: '#openSettings',
+      }]);
+    }
+
+    return base.concat(projectSteps(), [{
+      view: 'app',
+      t: '就这些',
+      b: '随时可以在设置里重看这个教程。',
+      sel: '#btnSettings',
+    }]);
   }
 
   /** 目标在不在、有没有尺寸。隐藏或没渲染出来的元素不能指。 */
@@ -191,19 +250,70 @@ const Tour = (() => {
     }
   }
 
-  function goto(n) {
+  /** 幕间：把演示库建出来，再走统一入口进项目。
+   *
+   * 这一步要几秒（现场画 12 张 2400px 的照片），所以教程先藏起来、让整页
+   * 进度条自己说话 —— 卡片盖在进度条上只会让人以为卡住了。 */
+  async function enterDemo() {
+    $('#tour').classList.add('hidden');
+    toast('正在准备演示照片…', '', 30000);
+    let r;
+    try {
+      r = await api('/api/demo', { method: 'POST', body: '{}' });
+    } catch (e) {
+      toast('无法准备演示照片：' + ((e.body && e.body.error) || e.message || ''), 'err', 6000);
+      $('#tour').classList.remove('hidden');
+      return false;
+    }
+    if (!r || !r.ok) {
+      toast((r && r.error) || '无法准备演示照片', 'err', 6000);
+      $('#tour').classList.remove('hidden');
+      return false;
+    }
+    // 图片地址要先知道是哪个库，否则第一张缩略图会去拿上一个库的缓存。
+    setLibSlug(r.slug);
+    demoReady = true;
+    try {
+      await enter();            // 新库会先过整页进度，分析完自动进过图
+    } catch (e) {
+      /* enter 自己会处理错误并回首页 */
+    }
+    // 那句“正在准备”到此为止 —— 它的寿命是按最坏情况给的 30 秒。
+    const t = $('#toast');
+    if (t) t.classList.add('hidden');
+    $('#tour').classList.remove('hidden');
+    return true;
+  }
+
+  async function goto(n) {
     step = Math.max(0, Math.min(steps.length - 1, n));
     const s = steps[step];
+    if (s.act === 'demo' && !demoReady) {
+      const ok = await enterDemo();
+      if (!ok) { close(false); return; }   // 造不出来就别把教程卡在半空
+    }
     // 先切到这一屏，再量它 —— 隐藏的页量出来是 0×0
     if (s.view === 'home') home(); else proj();
     // 让浏览器排完版再量；requestAnimationFrame 在后台标签页会被节流，
-    // 所以两边都来一次
+    // 所以两边都来一次。后面的两次是给异步渲染留的：进项目那一步要等
+    // loadQueue 把列表画出来，否则 #listScroll 还是空的，高亮只能居中。
     requestAnimationFrame(() => requestAnimationFrame(render));
     setTimeout(render, 60);
+    setTimeout(render, 320);
+    setTimeout(render, 900);
+  }
+
+  /** 完整教程：首页 → 演示项目 → 删掉演示、回首页。 */
+  function start() {
+    open({ demo: true, hasLibrary: false });
   }
 
   function open(opts) {
     try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {}
+    demoMode = !!(opts && opts.demo);
+    demoReady = false;
+    // 教程期间不弹「三件事，两个方向」那个引导层（见 state.js 的说明）。
+    S.suppressCoach = true;
     // 能不能讲项目里那几步，取决于「此刻有没有打开项目」。
     // 从首页进来时 S.state 可能还没加载完 —— 那会被误判成没开项目，
     // 于是只讲 4 步。所以允许调用方直接告诉答案。
@@ -214,10 +324,18 @@ const Tour = (() => {
     goto(want - 1);
   }
 
-  function close(markSeen = true) {
+  async function close(markSeen = true) {
     $('#tour').classList.add('hidden');
     $('#tour').classList.remove('dim');
+    S.suppressCoach = false;
     if (markSeen) { try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {} }
+    if (!demoMode) return;
+    demoMode = false;
+    if (!demoReady) { onDemoEnd(); return; }   // 第一幕就跳过：没有东西需要删
+    demoReady = false;
+    // 演示到此为止：删掉临时库、回首页。删文件是服务端的事，这里只管界面。
+    try { await api('/api/demo/end', { method: 'POST', body: '{}' }); } catch (e) { /* 已关 */ }
+    onDemoEnd();
   }
 
   function seen() {
@@ -246,7 +364,13 @@ const Tour = (() => {
     }, true);
   }
 
-  return { open, close, bind, seen, isOpen: () => !$('#tour').classList.contains('hidden') };
+  /** 演示库结束时由 home.js 注入：回首页、刷新项目列表。 */
+  function configure(hooks) {
+    if (hooks && typeof hooks.onDemoEnd === 'function') onDemoEnd = hooks.onDemoEnd;
+  }
+
+  return { open, close, bind, seen, start, configure,
+           isOpen: () => !$('#tour').classList.contains('hidden') };
 })();
 
 export { Tour };
