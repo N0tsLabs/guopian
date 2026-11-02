@@ -271,20 +271,19 @@ def main() -> int:
 
         spec = os.path.join(ROOT, "guopian.spec")
 
-        def _pyinstaller() -> str:
-            # Windows 上入口是 pyinstaller.exe；装完之后要重新拼一次路径，
-            # 否则在"刚装好"的机器上（CI 就是）会拿到没有 .exe 的名字，
-            # 然后 FileNotFoundError —— 本地因为早就装好了，永远碰不到。
-            p = os.path.join(os.path.dirname(py()), "pyinstaller")
-            return p + ".exe" if os_name == "windows" else p
+        # 用 `python -m PyInstaller`，不拼可执行文件的路径。
+        #
+        # 入口脚本的位置取决于装法：venv 里是 <venv>\Scripts\pyinstaller.exe，
+        # 而系统 Python（CI 的 windows runner 就是）是 <prefix>\Scripts\… ——
+        # "在 python.exe 旁边"只对前者成立。CI 上连着红了两轮都是因为这个。
+        import importlib.util
 
-        pyinstaller = _pyinstaller()
-        if not os.path.exists(pyinstaller):
+        if importlib.util.find_spec("PyInstaller") is None:
             print("  pyinstaller not found, installing...")
             run([py(), "-m", "pip", "install", "--disable-pip-version-check", "pyinstaller"])
-            pyinstaller = _pyinstaller()
 
-        rc = run([pyinstaller, spec, "--noconfirm", "--clean", "--log-level", "WARN"])
+        rc = run([py(), "-m", "PyInstaller", spec, "--noconfirm", "--clean",
+                  "--log-level", "WARN"])
         if rc != 0:
             print("  !! pyinstaller failed ({})".format(rc))
             return rc
