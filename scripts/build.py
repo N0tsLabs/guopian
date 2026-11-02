@@ -270,13 +270,19 @@ def main() -> int:
         ensure_icon()
 
         spec = os.path.join(ROOT, "guopian.spec")
-        pyinstaller = os.path.join(os.path.dirname(py()), "pyinstaller")
-        if os_name == "windows":
-            pyinstaller += ".exe"
+
+        def _pyinstaller() -> str:
+            # Windows 上入口是 pyinstaller.exe；装完之后要重新拼一次路径，
+            # 否则在"刚装好"的机器上（CI 就是）会拿到没有 .exe 的名字，
+            # 然后 FileNotFoundError —— 本地因为早就装好了，永远碰不到。
+            p = os.path.join(os.path.dirname(py()), "pyinstaller")
+            return p + ".exe" if os_name == "windows" else p
+
+        pyinstaller = _pyinstaller()
         if not os.path.exists(pyinstaller):
             print("  pyinstaller not found, installing...")
             run([py(), "-m", "pip", "install", "--disable-pip-version-check", "pyinstaller"])
-            pyinstaller = os.path.join(os.path.dirname(py()), "pyinstaller")
+            pyinstaller = _pyinstaller()
 
         rc = run([pyinstaller, spec, "--noconfirm", "--clean", "--log-level", "WARN"])
         if rc != 0:
