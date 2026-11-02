@@ -83,6 +83,10 @@ function onKeyDown(e) {
     return;
   }
 
+  // 按住 Tab：把上一张塞进同一个取景框（同样的缩放、同样的位置），松手回到这张。
+  // 连拍在队列里本来就相邻，所以"比上一张"不需要先选一组 —— 这是最省事的对比。
+  if (e.key === 'Tab') { e.preventDefault(); abPeek(true); return; }
+
   const holdAct = HOLD_KEYS[e.key];
   if (holdAct) { e.preventDefault(); startHold(holdAct); return; }
   const tapAct = TAP_KEYS[e.key];
@@ -140,6 +144,7 @@ function onKeyDown(e) {
 }
 
 function onKeyUp(e) {
+  if (e.key === 'Tab') { abPeek(false); return; }
   if (e.key === 'z' || e.key === 'Z') {
     if (S.peekZoom) { S.peekZoom = false; resetView(true); }
     return;
@@ -171,6 +176,7 @@ let runAction = () => {};
 let undo = () => {};
 let closeModal = () => {};
 let setList = () => {};
+let abPeek = () => {};
 /* 当前是否正按住某个动作键，以及按的是哪一个。用一个取值函数而不是一个
    变量：hold 住在 app.js，这里只该问，不该能改。 */
 let holding = () => null;
@@ -183,6 +189,7 @@ function configure(actions) {
   if (actions.closeModal) closeModal = actions.closeModal;
   if (actions.setList) setList = actions.setList;
   if (actions.holding) holding = actions.holding;
+  if (actions.abPeek) abPeek = actions.abPeek;
 }
 
 

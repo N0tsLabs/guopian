@@ -306,11 +306,17 @@ function renderList() {
       }
       S.multi = false;
 
-      S.idx = i;
-      // render() 是 app.js 注入的（见 configure），它既画列表也换右侧卡片。
-      // 上一版我为了少闪一下把它换成只改类名，结果单击列表右侧完全不动 ——
-      // 那是把"点一下就换图"这条主路断了，比闪一下严重得多。
-      render();
+      // 修饰键点击只改选择，不换图。
+      //
+      // 以前这里无条件 S.idx = i; render(); —— 于是框选一段连拍时，大图会跟着
+      // 跳八次，每次都重画整列、换图、预取，选的过程里画面一直在动，很难对准。
+      // 资源管理器里点一下也只是选中，不会打开文件；想看其中一张，松开修饰键
+      // 再点一次就行。
+      const modifier = e.shiftKey || e.ctrlKey || e.metaKey;
+      if (!modifier) {
+        S.idx = i;
+        render();
+      }
       paintSelection();
       syncGrid();
     };
@@ -505,8 +511,25 @@ window.addEventListener('guopian:gridcancel', () => {
   render();
 });
 
+/** 把一组照片直接摊开（点相似组徽章就是这条路）。
+ *
+ * 分组是建议，不是判决：选进来之后还能用 Ctrl/Shift 加或减。
+ * 这样"一键整组"只在分组准的时候省事，不准的时候也不至于替用户做错决定。
+ */
+function selectGroup(gid) {
+  if (gid == null) return false;
+  // 从当前队列里取，而不是从库里全量取：被筛选隐藏的组员不该偷偷进多图。
+  const ids = S.queue.filter((x) => x.group_id === gid).map((x) => x.id);
+  if (ids.length < 2) return false;
+  S.sel = new Set(ids);
+  S.multi = true;
+  paintSelection();
+  syncGrid();
+  return true;
+}
+
 export { orderQueue, posKey, savedPos, savePos, sessKey, savedSession, saveSession,
-         pickStartIndex, itemHTML, observeThumbs,
+         pickStartIndex, itemHTML, observeThumbs, selectGroup,
   renderList, renderListSummary, highlightCurrent, updateListProgress,
   markListItem, configure
 };

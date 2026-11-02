@@ -152,8 +152,9 @@ const DecideGrid = (() => {
       ? `留下 ${picks.length} 张${nMark ? `（含精选 ${nMark}）` : ''}，其余 ${rest} 张不过`
       : `还没点任何一张 —— 提交的话 ${ids.length} 张全部不过`;
     const btn = $('#dgCommit', root);
+    // 按钮上直接写出两边的张数：按 Enter 的人往往不看旁边那行说明。
     btn.textContent = picks.length
-      ? `留下这 ${picks.length} 张`
+      ? `留下 ${picks.length} · 不过 ${rest}`
       : `全部 ${ids.length} 张不过`;
     btn.disabled = false;
     btn.classList.toggle('danger', !picks.length);

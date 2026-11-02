@@ -39,7 +39,7 @@ import { fitStage, layerTransform, setCardOffset, onWheel, onDblClick,
 import { physReset, setDragProgress, onStageDown, onDragMove, onDragEnd,
          cancelDrag, configure as configurePhysics } from './physics.js';
 import { orderQueue, renderList, renderListSummary, markListItem, pickStartIndex,
-         savedSession, saveSession, configure as configureList } from './list.js';
+         savedSession, saveSession, selectGroup, configure as configureList } from './list.js';
 import { render, renderActionState, renderDecisionBadge, placeStamp,
          configure as configureCard } from './card.js';
 import { openGrid, closeGrid, onGridClick, decideSelected,
@@ -508,6 +508,41 @@ async function loadQueue() {
   renderList();
   render();
 }
+
+/* ═════════════════════════ 按住 Tab 对比上一张 ═════════════════════════
+ *
+ * 连拍在按时间排的队列里本来就相邻，所以"哪张更实/谁闭眼"最常见的比较对象
+ * 就是上一张。把上一张塞进**同一个取景框**（同样的缩放、同样的平移），
+ * 松手再回来 —— 比"先选一组再摊开"少两步，而且不用相信任何分组。
+ *
+ * 只换图片地址，不动 V（缩放/平移），所以两帧看到的是同一块像素区域。
+ */
+let abPeekState = null;
+
+function abPeek(on) {
+  if (on) {
+    const prev = S.queue[S.idx - 1];
+    if (!prev) { toast('这已经是第一张'); return; }
+    if (abPeekState || S.animating) return;
+    abPeekState = {
+      card: el.photo.src,
+      hd: el.photoHD ? el.photoHD.src : '',
+      hdShown: !!(el.photoHD && !el.photoHD.classList.contains('hidden')),
+    };
+    el.photo.src = imgUrl(prev.id, 'card');
+    if (abPeekState.hdShown) el.photoHD.src = imgUrl(prev.id, 'full');
+    el.photoStage.classList.add('abPeek');
+    return;
+  }
+  if (!abPeekState) return;
+  el.photo.src = abPeekState.card;
+  if (el.photoHD && abPeekState.hdShown) el.photoHD.src = abPeekState.hd;
+  el.photoStage.classList.remove('abPeek');
+  abPeekState = null;
+}
+
+// 切到别的窗口时 keyup 不会来，别让卡片永远停在上一张。
+window.addEventListener('blur', () => abPeek(false));
 
 /* ═════════════════════════ 按住预览 ═════════════════════════ */
 
@@ -1000,10 +1035,10 @@ function setList(open) {
 configureView({ placeStamp });
 configurePhysics({ commitDecision });
 configureList({ render, loadQueue, renderTriage });
-configureCard({ resetHoldVisual });
+configureCard({ resetHoldVisual, selectGroup });
 configureGrid({ loadQueue });
 configureKeys({
-  startHold, endHold, runAction, undo, closeModal, setList,
+  startHold, endHold, runAction, undo, closeModal, setList, abPeek,
   holding: () => (hold ? hold.action : null),
 });
 

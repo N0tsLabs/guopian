@@ -784,6 +784,16 @@ code{font:400 11.5px var(--mono);color:var(--ink-2);
 }
 .photoStage.dragging{transition:none}
 
+/* 按住 Tab：把上一张塞进同一个取景框（同样的缩放和位置），用来比焦/比闭眼。
+   角上这条提示只在按住时出现，松手就没了。 */
+.photoStage.abPeek::after{
+  content:"上一张 · 松开 Tab 回到这张";
+  position:absolute;left:50%;bottom:14px;transform:translateX(-50%);
+  font:600 11px var(--mono);color:var(--ink-2);
+  background:var(--surface-2);border:1px solid var(--line-strong);
+  padding:4px 10px;border-radius:999px;pointer-events:none;z-index:40;
+}
+
 /* The image space. JS sizes this to bw*s x bh*s and pans it with translate
    only. Height is always derived from width through the photo's exact aspect
    ratio -- if the box ratio drifts even in the third decimal, object-fit has
@@ -1071,6 +1081,9 @@ code{font:400 11.5px var(--mono);color:var(--ink-2);
   padding:4px 8px;border-radius:var(--r2);
   font-variant-numeric:tabular-nums;
 }
+/* 点一下 = 把这一组摊开（分组是建议，不是判决） */
+.groupBadge.clickable{cursor:pointer}
+.groupBadge.clickable:hover{background:var(--surface-3);border-color:var(--accent)}
 .zoomBadge{
   position:absolute;left:50%;top:10px;transform:translateX(-50%);
   font:500 11px var(--mono);color:var(--ink);

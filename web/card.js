@@ -216,8 +216,14 @@ function renderGroup(c) {
     el.groupBadge.classList.remove('hidden');
     el.groupBadge.textContent = `相似组 ${c.group_rank}/${c.group_size}` +
       (c.group_rank === 1 ? ' · 组内最佳' : '');
+    // 分组准的时候，一下把整组摊开；不准的时候用户还能在里面自己补/删。
+    // 这样"整组"是建议而不是判决 —— Ctrl/Shift 仍然随时可用。
+    el.groupBadge.title = '点一下：把这一组一起摊开对比（还能 Ctrl/Shift 加减）';
+    el.groupBadge.classList.add('clickable');
+    el.groupBadge.onclick = () => selectGroup(c.group_id);
   } else {
     el.groupBadge.classList.add('hidden');
+    el.groupBadge.onclick = null;
   }
 }
 
@@ -302,8 +308,10 @@ function loadFullRes(c) {
    resetHoldVisual：它要同时管 hold、蒙版进度、印章、卡片偏移，而且必须和
    flyOut / endHold 的节奏一致。为一个函数 import app.js 会成环。 */
 let resetHoldVisual = () => {};
+let selectGroup = () => {};
 function configure(hooks) {
   if (hooks && hooks.resetHoldVisual) resetHoldVisual = hooks.resetHoldVisual;
+  if (hooks && hooks.selectGroup) selectGroup = hooks.selectGroup;
 }
 
 
