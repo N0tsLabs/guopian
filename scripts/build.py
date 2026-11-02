@@ -29,7 +29,19 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIST = os.path.join(ROOT, "dist")
 BUILD = os.path.join(ROOT, "build")
 RELEASE = os.path.join(ROOT, "release")
-VERSION = "0.1.0"
+
+# 版本号只有一处真源。这里曾经写死 "0.1.0"，于是产物文件名一直停在 0.1.0，
+# 而程序里打印的是 __version__ —— 发的包和说的版本对不上。
+sys.path.insert(0, ROOT)
+from guopian import __version__ as VERSION          # noqa: E402
+
+# Windows 的 CI 控制台是 cp1252，这个脚本会打印中文 —— 不重设编码会在第一行
+# 就 UnicodeEncodeError（GitHub Actions 上实测）。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 DESKTOP_ENTRY = """[Desktop Entry]
 Type=Application

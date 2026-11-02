@@ -45,6 +45,8 @@ jobs:
 
       # 模型在这里下载：spec 会把 models/ 打进包里，用户那边就不用联网了。
       - name: 打包（PyInstaller + 压缩 + sha256）
+        env:
+          PYTHONIOENCODING: "utf-8"      # Windows runner 的控制台是 cp1252
         run: python scripts/build.py
 
       - name: 产物
