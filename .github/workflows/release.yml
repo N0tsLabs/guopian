@@ -22,9 +22,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-latest 是 arm64，macos-13 是 Intel —— 两个架构的依赖轮子不通用，
-        # 只能各打一次。
-        os: [windows-latest, macos-latest, macos-13, ubuntu-latest]
+        # macos-latest 是 arm64。Intel mac 要 macos-13，但那个 runner 排一次队
+        # 十几分钟起步（GitHub 在缩它），放在 tag 触发里会把发版卡死 ——
+        # 需要 Intel 包时临时把 macos-13 加进这一行，手动 workflow_dispatch 跑。
+        os: [windows-latest, macos-latest, ubuntu-latest]
 
     steps:
       - uses: actions/checkout@v4
