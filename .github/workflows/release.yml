@@ -22,7 +22,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        # macos-latest 是 arm64，macos-13 是 Intel —— 两个架构的依赖轮子不通用，
+        # 只能各打一次。
+        os: [windows-latest, macos-latest, macos-13, ubuntu-latest]
 
     steps:
       - uses: actions/checkout@v4

@@ -225,9 +225,13 @@ coll = COLLECT(
 # ------------------------------------------------------------------ macOS
 # On macOS a bare executable folder is not a usable app: Finder, Gatekeeper
 # and notarisation all want a real .app bundle with an Info.plist.
+#
+# BUNDLE 收的是 COLLECT 的结果，不是 EXE。传 exe_gui 得到的是一个只有
+# Info.plist、图标和启动器的空壳 —— 整个 _internal（Python、web/、models/、
+# 依赖 dylib）都不会进去。CI 上实测出来是 11.8 MB 的 zip，解开只有 6 个文件。
 if sys.platform == "darwin":
     app = BUNDLE(
-        exe_gui,
+        coll,
         name="Guopian.app",
         icon=ICON,
         bundle_identifier="top.n0ts.guopian",
