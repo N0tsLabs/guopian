@@ -1,0 +1,74 @@
+name: Release
+
+# 打包三个平台，挂到一个 GitHub Release 上。
+#
+# 这不是锦上添花：PyInstaller 不能交叉编译，macOS 的 .app 只能在 macOS 上打，
+# Linux 的也要各自的 libc —— 所以"发布全部版本"这件事只能发生在 CI 里。
+#
+# 触发：推一个 v* 标签，或者在 Actions 页面手动跑。
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write          # 建 Release、传附件
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Linux 运行时依赖
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1 libglib2.0-0 libegl1 libgomp1
+
+      - name: Python 依赖
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      # 模型在这里下载：spec 会把 models/ 打进包里，用户那边就不用联网了。
+      - name: 打包（PyInstaller + 压缩 + sha256）
+        run: python scripts/build.py
+
+      - name: 产物
+        shell: bash
+        run: ls -lh release/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: guopian-${{ matrix.os }}
+          path: release/*
+          if-no-files-found: error
+
+  publish:
+    name: 发布到 Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+
+      - name: 上传三个平台的包
+        uses: softprops/action-gh-release@v2
+        with:
+          files: assets/*
+          generate_release_notes: true
